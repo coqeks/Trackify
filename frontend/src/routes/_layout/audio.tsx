@@ -1,94 +1,193 @@
 import useAuth from "../../hooks/useAuth";
-import { useState, useRef } from "react";
-import { Link, createFileRoute, useNavigate } from "@tanstack/react-router";
-import {
-  FileAudio
-} from "lucide-react"
-
+import { useState, useRef, useCallback } from "react";
+import { createFileRoute, useNavigate } from "@tanstack/react-router";
+import { FileAudio, ArrowLeft } from "lucide-react";
 
 type UploadState = "idle" | "uploading" | "success" | "error";
-type audioType = "guitar" | "piano" | "drums" | "bass" | "vocals";
+type AudioType = "guitar" | "piano" | "drums" | "bass" | "vocals";
+type Step = "1" | "2" | "3";
 
-interface UploadResult {
-    filename: string;
-    content_type: string;
-    size_bytes: number;
-    message: string;
-}
+const allowedFileType = [
+  "audio/mpeg",
+  "audio/wav",
+  "audio/ogg",
+  "audio/mp4",
+  "audio/webm",
+  "audio/flac",
+];
 
 export async function getDirectoryHandle() {
-  const rootHandle = await navigator.storage.getDirectory()
-  const directoryHandle = await rootHandle.getDirectoryHandle("tracks", {create: true})
-  return directoryHandle
+  const rootHandle = await navigator.storage.getDirectory();
+  return rootHandle.getDirectoryHandle("tracks", { create: true });
 }
 
-export const Route = createFileRoute('/_layout/audio')({
-  component: Audio
-})
+export const Route = createFileRoute("/_layout/audio")({
+  component: Audio,
+});
 
-const directoryHandle = await getDirectoryHandle()
+interface UploadStep1Props {
+  selectedFile: File | null;
+  fileInputRef: React.RefObject<HTMLInputElement>;
+  onFileSelected: (file: File) => void;
+  onProceed: () => void;
+}
 
-async function createPlayBack(
-  track_blob: Blob,
-  parent : Node
-) {
-  const blobURL = URL.createObjectURL(track_blob);
+function UploadStep1({
+  selectedFile,
+  fileInputRef,
+  onFileSelected,
+  onProceed,
+}: UploadStep1Props) {
+  const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    if (!allowedFileType.includes(file.type)) {
+      console.log("Unsupported Type");
+      return;
+    }
+    onFileSelected(file);
+  };
 
-  const audioPlayer = document.createElement("audio");
-  audioPlayer.src = blobURL;
-  audioPlayer.controls = true;
-  parent.appendChild(audioPlayer);
+  return (
+    <div className="flex flex-col gap-5 justify-center">
+      <div className="topbar justify-between">
+        <div className="brand">Upload Your Audio</div>
+      </div>
+      <div className="flex flex-col items-center">
+        <div
+          className="bg-gray-180 border border-dotted p-10 m-5 w-8/12 max-w-8/12 flex flex-col items-center gap-1"
+          id="upload-card"
+        >
+          <div
+            className="text-gray-300 hover:text-gray-500 hover:font-bold cursor-pointer flex flex-col items-center"
+            onClick={() => fileInputRef.current?.click()}
+          >
+            <FileAudio size={120} />
+            <h3 className="text-black text-8 m-2">
+              Click to Choose a File to Upload
+            </h3>
+          </div>
+
+          <input
+            type="file"
+            onChange={handleChange}
+            className="hidden"
+            ref={fileInputRef}
+          />
+
+          {selectedFile && (
+            <p className="text-gray-500">Selected file: {selectedFile.name}</p>
+          )}
+
+          {selectedFile && (
+            <button className="btn-secondary" onClick={onProceed}>
+              Proceed
+            </button>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+interface UploadStep2Props {
+  target: AudioType;
+  onTargetChange: (t: AudioType) => void;
+  onBack: () => void;
+  onProceed: () => void;
+}
+
+function UploadStep2({ onBack, onProceed }: UploadStep2Props) {
+  // NOTE: all four cards currently say "Guitar" and are hardcoded checked.
+  // If these should represent different stems (guitar/piano/drums/bass),
+  // give each its own label + controlled checked state tied to `target`
+  // (or an array of selected stems) instead of defaultChecked.
+  return (
+    <div className="flex flex-col gap-5">
+      <div className="topbar justify-start">
+        <div className="px-2" onClick={onBack}>
+          <ArrowLeft />
+        </div>
+        <div className="brand px-2">Customize Your Track</div>
+      </div>
+      <div>
+        Uncheck sounds you want to exclude. Only checked sounds will be
+        present in your backing track.
+      </div>
+      <div className="grid grid-cols-2 sm:grid-cols-2 gap-y-5 columns place-items-center">
+        <div className="border w-3/4 py-2 rounded-2xl flex justify-center gap-2">
+          <h3>Guitar</h3>
+          <input type="checkbox" defaultChecked />
+        </div>
+        <div className="border w-3/4 py-2 rounded-2xl flex justify-center gap-2">
+          <h3>Guitar</h3>
+          <input type="checkbox" defaultChecked />
+        </div>
+        <div className="border w-3/4 py-2 rounded-2xl flex justify-center gap-2">
+          <h3>Guitar</h3>
+          <input type="checkbox" defaultChecked />
+        </div>
+        <div className="border w-3/4 py-2 rounded-2xl flex justify-center gap-2">
+          <h3>Guitar</h3>
+          <input type="checkbox" defaultChecked />
+        </div>
+      </div>
+      <button className="btn-secondary" onClick={onProceed}>
+        Proceed
+      </button>
+    </div>
+  );
+}
+
+interface UploadStep3Props {
+  audioContainerRef: React.RefObject<HTMLDivElement>;
+  onDownload: () => void;
+}
+
+function UploadStep3({ audioContainerRef, onDownload }: UploadStep3Props) {
+  return (
+    <div className="auth-card" id="download" ref={audioContainerRef}>
+      <label htmlFor="track-name">Name of your track:</label>
+      <input type="text" id="track-name" name="track-name" />
+      <button className="btn-primary" onClick={onDownload}>
+        Download Track
+      </button>
+    </div>
+  );
 }
 
 function Audio() {
   const { user, logout } = useAuth();
   const navigate = useNavigate();
+
   const [uploadState, setUploadState] = useState<UploadState>("idle");
-  const [result, setResult] = useState<UploadResult | null>(null);
-  const [track_result, setTrack] = useState<Blob | null>(null);
+  const [trackResult, setTrackResult] = useState<Blob | null>(null);
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
-  const inputRef = useRef<HTMLInputElement>(null);
+  const [target, setTarget] = useState<AudioType>("guitar");
+  const [step, setStep] = useState<Step>("1");
 
-  const fileInputRef = useRef(null)
+  const fileInputRef = useRef<HTMLInputElement>(null);
+  const audioContainerRef = useRef<HTMLDivElement>(null);
 
-  
   function handleLogout() {
     logout();
-    navigate({to: "/login"})
+    navigate({ to: "/login" });
   }
 
-  const handleResult = async () => {
-    if (track_result == null) return;
+  const createPlayback = (blob: Blob) => {
+    const container = audioContainerRef.current;
+    if (!container) return;
+    const blobURL = URL.createObjectURL(blob);
+    const audioPlayer = document.createElement("audio");
+    audioPlayer.src = blobURL;
+    audioPlayer.controls = true;
+    container.appendChild(audioPlayer);
+  };
 
-    let downloadLink = document.createElement("a");
-    downloadLink.href = window.URL.createObjectURL(track_result);
-    downloadLink.download = "BackingTrack.mp3";
-    document.body.appendChild(downloadLink);
-    downloadLink.click();
-
-    const fileHandle = await directoryHandle.getFileHandle("audio", {create: true});
-    const writable = await fileHandle.createWritable();
-    await writable.write(track_result);
-    await writable.close()
-
-    console.log("downloading track")
-  }
-
-  const handleUpload = async () => {
+  const handleUpload = useCallback(async () => {
     if (!selectedFile) return;
 
     setUploadState("uploading");
-    console.log("Uploading")
-
-    const selectElm = document.getElementById("select-target") as HTMLInputElement
-    let target: audioType;
-    if (!selectElm) {
-      target = "guitar"
-    } else {
-      target = selectElm.value as audioType
-    };
-
-    console.log(target);
 
     const formData = new FormData();
     formData.append("file", selectedFile);
@@ -102,64 +201,69 @@ function Audio() {
 
       if (!res.ok) {
         const err = await res.json();
-        console.log(err.detail)
         throw new Error(err.detail);
       }
 
-      const downloadBtn = document.getElementById("download") as HTMLElement
-      downloadBtn.hidden = false;
-
-      const audio = await res.blob()
-      console.log("Success")
-      createPlayBack(audio, document.getElementById("download") as HTMLElement)
+      const audio = await res.blob();
+      setTrackResult(audio);
       setUploadState("success");
-      setTrack(audio);
+      // wait a tick so UploadStep3 (and its ref) is mounted before we append the player
+      requestAnimationFrame(() => createPlayback(audio));
     } catch (err: unknown) {
+      console.error(err);
       setUploadState("error");
     }
-  };
+  }, [selectedFile, target]);
 
-  const promptFileInput = async () => {
-    fileInputRef.current.click();
-  }
+  const handleDownload = useCallback(async () => {
+    if (!trackResult) return;
+
+    const downloadLink = document.createElement("a");
+    downloadLink.href = window.URL.createObjectURL(trackResult);
+    downloadLink.download = "BackingTrack.mp3";
+    document.body.appendChild(downloadLink);
+    downloadLink.click();
+    downloadLink.remove();
+
+    const rootHandle = await navigator.storage.getDirectory();
+    const directoryHandle = await rootHandle.getDirectoryHandle("tracks", {
+      create: true,
+    });
+    const fileHandle = await directoryHandle.getFileHandle("audio", {
+      create: true,
+    });
+    const writable = await fileHandle.createWritable();
+    await writable.write(trackResult);
+    await writable.close();
+  }, [trackResult]);
 
   return (
-    <div className="flex flex-col gap-5 justify-center">
-      <div className="topbar">
-        <div className="brand">Upload Your Audio</div>
-      </div>
-      <div className="flex flex-col items-center">
-        <div className="bg-gray-180 border p-10 m-5 w-8/12 max-w-8/12 flex flex-col items-center gap-1" id="upload-card">
-          
-          <div className="text-gray-300 hover:text-gray-500 hover:font-bold cursor-pointer flex flex-col items-center"
-          onClick={promptFileInput}>
-            <FileAudio size={120}/>
-            <h3 className="text-black text-8 m-2">Choose a File to Upload</h3>
-          </div>
-
-          <input type="file" onChange={(e) => setSelectedFile(e.target.files[0])} 
-          className="hidden" ref={fileInputRef}></input>
-
-          {selectedFile && <p className="text-gray-500">Selected file: {selectedFile.name}</p>}
-
-          <select name="target" required id="select-target" hidden>
-            <option value="">-- Choose instrument to exclude --</option>
-            <option value="guitar">Lead Guitar</option>
-            <option value="drums">Percussion</option>
-            <option value="vocals">Vocal</option>
-            <option value="bass">Bass</option>
-            <option value="piano">Piano</option>
-          </select>
-
-          <button className="btn-secondary" onClick={handleUpload}>Proceed</button>
-        </div>
-        <div className="auth-card" id="download" hidden>
-          <label htmlFor="track-name">Name of your track:</label>
-          <input type="text" id="track-name" name="track-name"></input>
-          <button className="btn-primary" onClick={handleResult}>Download Track</button>
-        </div>
-      </div>
+    <div>
+      {step === "1" && (
+        <UploadStep1
+          selectedFile={selectedFile}
+          fileInputRef={fileInputRef}
+          onFileSelected={setSelectedFile}
+          onProceed={() => setStep("2")}
+        />
+      )}
+      {step === "2" && (
+        <UploadStep2
+          target={target}
+          onTargetChange={setTarget}
+          onBack={() => setStep("1")}
+          onProceed={() => {
+            setStep("3");
+            handleUpload();
+          }}
+        />
+      )}
+      {step === "3" && (
+        <UploadStep3
+          audioContainerRef={audioContainerRef}
+          onDownload={handleDownload}
+        />
+      )}
     </div>
   );
 }
-
