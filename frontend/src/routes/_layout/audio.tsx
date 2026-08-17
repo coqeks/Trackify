@@ -1,7 +1,11 @@
 import useAuth from "../../hooks/useAuth";
 import { useState, useRef, useCallback } from "react";
 import { createFileRoute, useNavigate } from "@tanstack/react-router";
-import { FileAudio, ArrowLeft } from "lucide-react";
+import { 
+  FileAudio, 
+  ArrowLeft,
+  ArrowRight
+} from "lucide-react";
 
 type UploadState = "idle" | "uploading" | "success" | "error";
 type AudioType = "guitar" | "piano" | "drums" | "bass" | "vocals";
@@ -38,24 +42,29 @@ function UploadStep1({
   onFileSelected,
   onProceed,
 }: UploadStep1Props) {
+
+  const [errMessage, setError] = useState<string | null>(null);
+
   const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
-    if (!file) return;
+    if (!file) {setError("No File Detected!");}
     if (!allowedFileType.includes(file.type)) {
+      setError("Make sure you are uploading an audio file!");
       console.log("Unsupported Type");
       return;
     }
+    setError(null)
     onFileSelected(file);
   };
 
   return (
-    <div className="flex flex-col gap-5 justify-center">
+    <div className="flex flex-col gap-5">
       <div className="topbar justify-between">
         <div className="brand">Upload Your Audio</div>
       </div>
       <div className="flex flex-col items-center">
         <div
-          className="bg-gray-180 border border-dotted p-10 m-5 w-8/12 max-w-8/12 flex flex-col items-center gap-1"
+          className="bg-gray-180 border border-dotted p-10 m-5 w-8/12 max-w-8/12 min-h-0 flex flex-col items-center gap-1 overflow-hidden"
           id="upload-card"
         >
           <div
@@ -75,16 +84,21 @@ function UploadStep1({
             ref={fileInputRef}
           />
 
-          {selectedFile && (
-            <p className="text-gray-500">Selected file: {selectedFile.name}</p>
+          {errMessage != null && (
+            <div className="error-msg">{errMessage}</div>
           )}
 
           {selectedFile && (
-            <button className="btn-secondary" onClick={onProceed}>
-              Proceed
-            </button>
+            <p className="text-gray-500">Selected file: {selectedFile.name}</p>
           )}
         </div>
+      </div>
+      <div className="flex justify-end w-5/6">
+          {selectedFile && (
+              <button className="btn-secondary w-1/4" onClick={onProceed}>
+                Proceed
+              </button>
+          )}
       </div>
     </div>
   );
@@ -98,10 +112,7 @@ interface UploadStep2Props {
 }
 
 function UploadStep2({ onBack, onProceed }: UploadStep2Props) {
-  // NOTE: all four cards currently say "Guitar" and are hardcoded checked.
-  // If these should represent different stems (guitar/piano/drums/bass),
-  // give each its own label + controlled checked state tied to `target`
-  // (or an array of selected stems) instead of defaultChecked.
+  
   return (
     <div className="flex flex-col gap-5">
       <div className="topbar justify-start">
@@ -120,21 +131,29 @@ function UploadStep2({ onBack, onProceed }: UploadStep2Props) {
           <input type="checkbox" defaultChecked />
         </div>
         <div className="border w-3/4 py-2 rounded-2xl flex justify-center gap-2">
-          <h3>Guitar</h3>
+          <h3>Piano</h3>
           <input type="checkbox" defaultChecked />
         </div>
         <div className="border w-3/4 py-2 rounded-2xl flex justify-center gap-2">
-          <h3>Guitar</h3>
+          <h3>Vocal</h3>
           <input type="checkbox" defaultChecked />
         </div>
         <div className="border w-3/4 py-2 rounded-2xl flex justify-center gap-2">
-          <h3>Guitar</h3>
+          <h3>Drums</h3>
           <input type="checkbox" defaultChecked />
         </div>
+        <div className="border w-3/4 py-2 rounded-2xl flex justify-center gap-2">
+          <h3>Others</h3>
+          <input type="checkbox" defaultChecked />
+        </div>
+        
       </div>
-      <button className="btn-secondary" onClick={onProceed}>
-        Proceed
-      </button>
+      <div className="flex justify-end">
+        <button className="btn-secondary w-1/3 flex justify-center" onClick={onProceed}>
+          <h2 className="px-2 translate-y-0.5">Proceed</h2>
+          <ArrowRight />
+        </button>
+      </div>
     </div>
   );
 }
@@ -142,37 +161,39 @@ function UploadStep2({ onBack, onProceed }: UploadStep2Props) {
 interface UploadStep3Props {
   audioContainerRef: React.RefObject<HTMLDivElement>;
   onDownload: () => void;
+  onBack: () => void;
 }
 
-function UploadStep3({ audioContainerRef, onDownload }: UploadStep3Props) {
+function UploadStep3({ audioContainerRef, onDownload, onBack }: UploadStep3Props) {
   return (
-    <div className="auth-card" id="download" ref={audioContainerRef}>
-      <label htmlFor="track-name">Name of your track:</label>
-      <input type="text" id="track-name" name="track-name" />
-      <button className="btn-primary" onClick={onDownload}>
-        Download Track
-      </button>
+    <div className="flex flex-col gap-5">
+      <div className="topbar justify-start">
+        <div className="px-2" onClick={onBack}>
+          <ArrowLeft />
+        </div>
+        <div className="brand">Download Your Finished Track</div>
+      </div>
+      <div className="flex flex-col border bg-gray-100 p-5" id="download" ref={audioContainerRef}>
+        <label htmlFor="track-name">Name of your track:</label>
+        <input type="text" id="track-name" name="track-name" />
+        <button className="btn-primary" onClick={onDownload}>
+          Download Track
+        </button>
+      </div>
     </div>
   );
 }
 
 function Audio() {
-  const { user, logout } = useAuth();
-  const navigate = useNavigate();
 
   const [uploadState, setUploadState] = useState<UploadState>("idle");
   const [trackResult, setTrackResult] = useState<Blob | null>(null);
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
   const [target, setTarget] = useState<AudioType>("guitar");
-  const [step, setStep] = useState<Step>("1");
+  const [step, setStep] = useState<Step>("2");
 
   const fileInputRef = useRef<HTMLInputElement>(null);
   const audioContainerRef = useRef<HTMLDivElement>(null);
-
-  function handleLogout() {
-    logout();
-    navigate({ to: "/login" });
-  }
 
   const createPlayback = (blob: Blob) => {
     const container = audioContainerRef.current;
@@ -262,6 +283,7 @@ function Audio() {
         <UploadStep3
           audioContainerRef={audioContainerRef}
           onDownload={handleDownload}
+          onBack={() => setStep("2")}
         />
       )}
     </div>

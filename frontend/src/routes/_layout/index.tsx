@@ -10,9 +10,9 @@ function Index() {
   console.log(currentUser);
   return (
     <div className="flex flex-col gap-5">
-      <div className="topbar flex">
-        <div className="brand">Your Songs</div>
-        <div><Link to="/audio">start uploading</Link></div>
+      <div className="topbar justify-between">
+        <div className="brand">Your Tracks</div>
+        <div className="border hover:bg-gray-200"><Link to="/audio">start uploading</Link></div>
       </div>
       <h3>Welcome Home!, { currentUser?.full_name }</h3>
     </div>

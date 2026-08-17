@@ -17,9 +17,9 @@ export const Route = createFileRoute("/_layout")({
     console.log("index before load")
     if (!isLoggedIn()) {
         console.log("not logged in")
-        throw redirect({
-            to: "/login"
-        })
+        // throw redirect({
+        //     to: "/login"
+        // })
     } else {
         console.log("Logged in")
     }
