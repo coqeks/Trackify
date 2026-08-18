@@ -16,7 +16,7 @@ class User(Base):
     hashed_password = Column(String, nullable=False)
     is_active = Column(Boolean, default=True)
     created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc))
-
+    
 class PostBase(Base):
     __tablename__ = "posts"
 

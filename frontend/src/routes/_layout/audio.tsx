@@ -1,4 +1,4 @@
-import useAuth from "../../hooks/useAuth";
+import { get_purl, request_separation } from "../../client/request"
 import { useState, useRef, useCallback } from "react";
 import { createFileRoute, useNavigate } from "@tanstack/react-router";
 import { 
@@ -6,6 +6,7 @@ import {
   ArrowLeft,
   ArrowRight
 } from "lucide-react";
+import type { JsonResponse } from "@tanstack/react-router/ssr/client";
 
 type UploadState = "idle" | "uploading" | "success" | "error";
 type AudioType = "guitar" | "piano" | "drums" | "bass" | "vocals";
@@ -211,25 +212,34 @@ function Audio() {
     setUploadState("uploading");
 
     const formData = new FormData();
-    formData.append("file", selectedFile);
-    formData.append("target", target);
 
     try {
-      const res = await fetch("http://localhost:8000/audio", {
-        method: "POST",
-        body: formData,
-      });
+      const { upload_url, s3_key } = await get_purl() 
+      console.log(upload_url)
 
-      if (!res.ok) {
-        const err = await res.json();
-        throw new Error(err.detail);
+      if (selectedFile.size > 10485760) {
+        throw new Error("File size is too large")
       }
 
-      const audio = await res.blob();
-      setTrackResult(audio);
-      setUploadState("success");
-      // wait a tick so UploadStep3 (and its ref) is mounted before we append the player
-      requestAnimationFrame(() => createPlayback(audio));
+      // await fetch(upload_url, {
+      //   method: "PUT",
+      //   body: selectedFile
+      // })
+
+      formData.append("target", target);
+      formData.append("s3_key", s3_key);
+
+      const response = await fetch("http://localhost:8000/audio", {
+        method: "POST",
+        body: formData
+      })
+
+      console.log(await response.json())
+
+      // const audio = await res.blob();
+      // setTrackResult(audio);
+      // setUploadState("success");
+      // requestAnimationFrame(() => createPlayback(audio));
     } catch (err: unknown) {
       console.error(err);
       setUploadState("error");

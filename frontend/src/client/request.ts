@@ -14,6 +14,11 @@ export interface AuthResponse {
     user: User;
 }
 
+export interface CloudResponse {
+    upload_url: string;
+    s3_key: string;
+}
+
 export const read_user = async () => {
     console.log("Reading user")
     const data = await apiClient.get<User>("/auth/me");
@@ -35,6 +40,24 @@ export const signup = async (formData) => {
         return data;
     } catch (error) {
         console.log(error.status)
+        throw error
+    }
+}
+
+export const get_purl = async () => {
+    try {
+        const response = await apiClient.get<CloudResponse>("/audio/upload");
+        return response
+    } catch (error) {
+        throw error
+    }
+}
+
+export const request_separation = async (formData) => {
+    try {
+        const response = await apiClient.post<CloudResponse>("/audio", formData);
+        return response
+    } catch (error) {
         throw error
     }
 }

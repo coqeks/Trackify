@@ -1,5 +1,6 @@
 import boto3
 from botocore.exceptions import ClientError
+from botocore.config import Config
 from fastapi import UploadFile, HTTPException
 from dotenv import load_dotenv
 import os
@@ -17,11 +18,15 @@ s3_client = boto3.client(
     endpoint_url=f"https://{ACCOUNT_ID}.r2.cloudflarestorage.com",
     aws_access_key_id=ACCESS_KEY_ID,
     aws_secret_access_key=SECRET_ACCESS_KEY,
-    region_name="auto",  # R2 uses 'auto' for region
+    region_name="auto", 
+    config=Config(
+        s3={"addressing_style": "path"},
+        request_checksum_calculation="when_required",
+        response_checksum_validation="when_required",
+    )
 )
 
-def cloud_upload(audio_file: UploadFile, audio_key: str):
-    print("sommething")
+def upload_object(audio_file: UploadFile, audio_key: str):
     try:
         s3_client.upload_fileobj(
             Fileobj = audio_file,
@@ -31,14 +36,34 @@ def cloud_upload(audio_file: UploadFile, audio_key: str):
         )
     except:
         print("[Cloud Upload] Something went wrong")
+
+def remove_object(key: str):
+    try:
+        response = s3_client.delete_object(
+            Bucket = BUCKET_NAME,
+            Key = key
+        )
+    except:
+        print("[Cloud] Something went wrong: ", response)
+
+def read_object(key: str):
+    try: 
+        response = s3_client.get_object(
+            Bucket = BUCKET_NAME,
+            Key = key
+        )
+        return response
+    except:
+        raise HTTPException(status_code=500, detail="reading error [cloud]")
     
-def generate_upload_url(fileName: str, fileID: str):
+def generate_upload_url(fileID: str):
+
     s3_key = f"uploads/raw/{fileID}"
 
     try:
         presigned_url = s3_client.generate_presigned_url(
             'put_object',
-            Params={'Bucket': BUCKET_NAME, 'Key': s3_key, 'ContentType': 'audio/mpeg'},
+            Params={'Bucket': BUCKET_NAME, 'Key': s3_key},
             ExpiresIn=300
         )
     except ClientError as e:
