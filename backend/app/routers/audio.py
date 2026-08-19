@@ -20,6 +20,6 @@ async def read_audio(current_user=Depends(get_current_user)):
     return cloud.generate_upload_url(str(unique_id))
 
 @router.post("/")
-async def queue_process(target: Annotated[str, Form()], s3_key: Annotated[str, Form()]):
-    separate.delay(target, s3_key) 
-    return {"Status": "Success"}
+async def queue_process(target: Annotated[str, Form()], s3_key: Annotated[str, Form()], backgroundTask: BackgroundTasks = None):
+    result = separate.delay(s3_key, target)
+    return {"Status": "Task Queued?"}

@@ -5,8 +5,11 @@ import time
 import uuid
 from pydub import AudioSegment
 from pathlib import Path
+from botocore.response import StreamingBody
 
-from fastapi import HTTPException, UploadFile, BackgroundTasks
+import app.cloud
+
+from fastapi import HTTPException, BackgroundTasks
 from fastapi.responses import FileResponse
 
 
@@ -42,10 +45,23 @@ async def _wait_for_capacity():
 def _cleanup(path: Path) -> None:
     shutil.rmtree(path, ignore_errors=True)
 
-# [1, 2, 3, 4, 5, 6] Add [0] and [1], append result to end of list and remove 
-# [3, 4, 5, 6, 3] -> [5, 6, 3, 7] -> [3, 7, 11] -> [11, 10] -> [21]
+
+def _read_streaming_body(body: StreamingBody) -> bytes:
+    """Blocking read, meant to be run in a worker thread via asyncio.to_thread.
+    Read chunks of audio file through loop and return the joined bytes."""
+    chunks = []
+    while True:
+        chunk = body.read(1024 * 1024)  # 1MB at a time
+        if not chunk:
+            break
+        chunks.append(chunk)
+    return b"".join(chunks)
+
+
 #Example: ["guitar.wav", "vocal.wav", "piano.wav", "drums.wav"]
 def combine_stems(filePaths: list):
+    """Combines separated stem audio using pydub's overlay() method.
+    Currently not used"""
     base_audio = AudioSegment.from_file(filePaths[0])
     if len(filePaths) > 1:
         for path in filePaths[1:]:
@@ -54,38 +70,42 @@ def combine_stems(filePaths: list):
     return base_audio.export("result.wav", format="wav")
 
 
-async def separate_stem(file: UploadFile, targets, background_tasks: BackgroundTasks = None):
-    print(TEMP_ROOT)
+async def separate_stem(
+    body: StreamingBody,
+    content_type: str,
+    filename: str,
+    target
+):
 
-    if file.content_type not in ALLOWED_TYPES:
-        raise HTTPException(status_code=400, detail=f"Invalid file type '{file.content_type}'.")
+    #Verify content_type is allowed
+    if content_type not in ALLOWED_TYPES:
+        raise HTTPException(status_code=400, detail=f"Invalid file type '{content_type}'.")
 
-    # 1. Admission control: don't even read the upload into memory/disk if we're tight on space
+    #Block thread until enough free space
     await _wait_for_capacity()
 
     work_dir = Path(tempfile.mkdtemp(prefix="demucs_"))
-    input_path = work_dir / f"input_{uuid.uuid4().hex}{Path(file.filename or '').suffix or '.audio'}"
+    input_path = work_dir / f"input_{uuid.uuid4().hex}{Path(filename or '').suffix or '.audio'}"
     output_dir = work_dir / "separated"
 
     try:
-        contents = await file.read()
+    
+        contents = await asyncio.to_thread(_read_streaming_body, body)
         if not contents:
-            raise HTTPException(status_code=400, detail="Uploaded file is empty.")
+            raise HTTPException(status_code=400, detail="Object from R2 is empty.")
 
-        # Double-check after reading (large uploads can eat the margin we checked earlier)
         if _free_bytes() - len(contents) < MIN_FREE_BYTES // 2:
             raise HTTPException(status_code=503, detail="Server is at storage capacity. Please try again shortly.")
 
         input_path.write_bytes(contents)
 
-        # 2. Concurrency control: only MAX_CONCURRENT_JOBS Demucs processes run at once;
-        #    others wait here (this is your "queue")
+        # Async block that runs demucs separation command, can be run maximum 3 times at the same time
         async with job_semaphore:
-            print("Demucs initiating, target: ", targets)
+            print("Demucs initiating, target: ", target)
             cmd = [
                 "python", "-m", "demucs",
                 "-n", DEMUCS_MODEL,
-                "--two-stems", targets,
+                "--two-stems", target,
                 "-o", str(output_dir),
                 str(input_path),
             ]
@@ -101,18 +121,12 @@ async def separate_stem(file: UploadFile, targets, background_tasks: BackgroundT
                 )
 
         track_stem = input_path.stem
-        result_path = output_dir / DEMUCS_MODEL / track_stem 
-        result_singlepath = result_path / f"{targets}.wav"
-
-        result_files = [f for f in result_path.iterdir() if f.is_file()]
-        print(result_files)
+        result_path = output_dir / DEMUCS_MODEL / track_stem / f"{target}.wav"
 
         if not result_path.exists():
             raise HTTPException(status_code=500, detail="Backing track files not found after processing.")
-
-        background_tasks.add_task(_cleanup, work_dir)
         print("Completed")
-        return FileResponse(path=result_path, media_type="audio/wav", filename=f"{track_stem}_backing_track.wav")
+        return result_path, work_dir
 
     except HTTPException:
         _cleanup(work_dir)
@@ -120,4 +134,3 @@ async def separate_stem(file: UploadFile, targets, background_tasks: BackgroundT
     except Exception as e:
         _cleanup(work_dir)
         raise HTTPException(status_code=500, detail=f"Unexpected error: {e}") from e
-

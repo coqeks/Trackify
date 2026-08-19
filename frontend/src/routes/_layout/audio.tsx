@@ -221,10 +221,10 @@ function Audio() {
         throw new Error("File size is too large")
       }
 
-      // await fetch(upload_url, {
-      //   method: "PUT",
-      //   body: selectedFile
-      // })
+      await fetch(upload_url, {
+        method: "PUT",
+        body: selectedFile
+      })
 
       formData.append("target", target);
       formData.append("s3_key", s3_key);
@@ -234,7 +234,7 @@ function Audio() {
         body: formData
       })
 
-      console.log(await response.json())
+      console.log(response.json())
 
       // const audio = await res.blob();
       // setTrackResult(audio);

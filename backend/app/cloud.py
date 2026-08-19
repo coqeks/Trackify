@@ -26,13 +26,10 @@ s3_client = boto3.client(
     )
 )
 
-def upload_object(audio_file: UploadFile, audio_key: str):
+def upload_file(file_path, key):
     try:
-        s3_client.upload_fileobj(
-            Fileobj = audio_file,
-            Bucket = BUCKET_NAME,
-            Key = audio_key,
-            ExtraArgs={"ContentType": audio_file.content_type}
+        s3_client.upload_file(
+            file_path, BUCKET_NAME, key
         )
     except:
         print("[Cloud Upload] Something went wrong")
@@ -53,8 +50,10 @@ def read_object(key: str):
             Key = key
         )
         return response
-    except:
-        raise HTTPException(status_code=500, detail="reading error [cloud]")
+    except ClientError as error:
+        print(error.response['Error']['Code'])
+        print(error.response['Error']['Message'])
+        raise error
     
 def generate_upload_url(fileID: str):
 
