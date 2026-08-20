@@ -1,4 +1,4 @@
-import { get_purl, request_separation } from "../../client/request"
+import { get_purl, request_separation, poll_progress } from "../../client/request"
 import { useState, useRef, useCallback } from "react";
 import { createFileRoute, useNavigate } from "@tanstack/react-router";
 import { 
@@ -229,17 +229,18 @@ function Audio() {
       formData.append("target", target);
       formData.append("s3_key", s3_key);
 
-      const response = await fetch("http://localhost:8000/audio", {
+      const data = await fetch("http://localhost:8000/audio", {
         method: "POST",
         body: formData
-      })
+      }).then(
+        (response) => {return response.json()}
+      )
 
-      console.log(response.json())
+      console.log(data)
 
-      // const audio = await res.blob();
-      // setTrackResult(audio);
-      // setUploadState("success");
-      // requestAnimationFrame(() => createPlayback(audio));
+      const result_key = await poll_progress(data["Task_ID"])
+      console.log("Result S3_Key: ", result_key)
+
     } catch (err: unknown) {
       console.error(err);
       setUploadState("error");

@@ -56,8 +56,23 @@ export const get_purl = async () => {
 export const request_separation = async (formData) => {
     try {
         const response = await apiClient.post<CloudResponse>("/audio", formData);
-        return response
+        return response;
     } catch (error) {
-        throw error
+        throw error;
     }
 }
+
+export const poll_progress = async (task_id: string) => {
+    while (true) {
+        const response = await apiClient.get("/audio/" + task_id);
+        if (response["Status"] == "SUCCESS") {
+            console.log("Separation task finished.")
+            return response["s3_Key"]
+        } else if (response["Statis"] == "FAILED") {
+            console.log("Separation task failed.")
+            return 1
+        }
+        await new Promise(resolve => setTimeout(resolve, 2000));
+    }
+}
+

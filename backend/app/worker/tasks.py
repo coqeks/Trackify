@@ -1,4 +1,4 @@
-from celery import Celery
+from celery import Celery, Task
 from app.utils import separate_stem, _cleanup
 from app import cloud
 
@@ -9,13 +9,22 @@ from botocore.exceptions import ClientError
 
 app = Celery("tasks", broker="redis://localhost:6379/0", backend="redis://localhost:6379/0")        
 
-@app.task
-def separate(s3_key, target):
+@app.task(bind=True)
+def separate(self: Task, s3_key: str, target: str):
     work_dir = None
     try:
+
+        self.update_state(
+            state='READING'
+        )
+
         response = cloud.read_object(s3_key)
         raw_audio = response['Body']
         content_type = response['ContentType']
+
+        self.update_state(
+            state='COMPUTING'
+        )
 
         result_path, work_dir = asyncio.run(
             separate_stem(
@@ -26,7 +35,13 @@ def separate(s3_key, target):
             )
         )
 
-        key = f"uploads/processed/{uuid.uuid4().hex}.wav"
+        self.update_state(
+            state='UPLOADING'
+        )
+
+        audio_id = s3_key.split("/")[2]
+
+        key = f"uploads/processed/result_{audio_id}"
         cloud.upload_file(result_path, key)
         return key
     except ClientError as err:
