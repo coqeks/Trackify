@@ -1,5 +1,5 @@
 .env
 backend/.venv/
-backend/app/__pycache__
-backend/app/routers/__pycache__
-backend/app/worker/__pycache__
+backend/app/__pycache__/
+backend/app/routers/__pycache__/
+backend/app/worker/__pycache__/

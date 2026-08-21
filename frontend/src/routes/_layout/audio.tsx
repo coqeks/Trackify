@@ -1,15 +1,16 @@
 import { get_purl, request_separation, poll_progress } from "../../client/request"
 import { useState, useRef, useCallback } from "react";
-import { createFileRoute, useNavigate } from "@tanstack/react-router";
+import { createFileRoute} from "@tanstack/react-router";
 import { 
   FileAudio, 
   ArrowLeft,
-  ArrowRight
+  ArrowRight,
+  CheckIcon
 } from "lucide-react";
 import type { JsonResponse } from "@tanstack/react-router/ssr/client";
 
-type UploadState = "idle" | "uploading" | "success" | "error";
-type AudioType = "guitar" | "piano" | "drums" | "bass" | "vocals";
+type UploadState = "IDLE" | "PENDING" | "COMPUTING" | "UPLOADING" | "READING" | "SUCCESS" | "FAILURE";
+type AudioType = "guitar" | "piano" | "drums" | "bass" | "vocals" | "other";
 type Step = "1" | "2" | "3";
 
 const allowedFileType = [
@@ -106,13 +107,32 @@ function UploadStep1({
 }
 
 interface UploadStep2Props {
-  target: AudioType;
-  onTargetChange: (t: AudioType) => void;
+  target: AudioType[]
+  onTargetChange: (t: AudioType[]) => void;
   onBack: () => void;
   onProceed: () => void;
 }
 
-function UploadStep2({ onBack, onProceed }: UploadStep2Props) {
+function UploadStep2({ target, onTargetChange, onBack, onProceed }: UploadStep2Props) {
+
+  let included = target
+  
+  const handleCheck = (e: React.ChangeEvent) => {
+    const target = e.target as HTMLInputElement;
+    if (target.checked == false) {
+      if (included.length <= 1) {
+        console.log("You need at least one source in your track.");
+        target.checked = true;
+      } else {
+        included = included.filter(item => item != target.id)
+        console.log(included)
+      }
+    } else if (target.checked == true) {
+      included.push(target.id as AudioType)
+      console.log(included)
+    }
+    onTargetChange(included as AudioType[])
+  }
   
   return (
     <div className="flex flex-col gap-5">
@@ -129,23 +149,27 @@ function UploadStep2({ onBack, onProceed }: UploadStep2Props) {
       <div className="grid grid-cols-2 sm:grid-cols-2 gap-y-5 columns place-items-center">
         <div className="border w-3/4 py-2 rounded-2xl flex justify-center gap-2">
           <h3>Guitar</h3>
-          <input type="checkbox" defaultChecked />
+          <input type="checkbox" id="guitar" className="checkbox" defaultChecked onChange={handleCheck} />
         </div>
         <div className="border w-3/4 py-2 rounded-2xl flex justify-center gap-2">
           <h3>Piano</h3>
-          <input type="checkbox" defaultChecked />
+          <input type="checkbox" id="piano" className="checkbox" defaultChecked onChange={handleCheck}/>
         </div>
         <div className="border w-3/4 py-2 rounded-2xl flex justify-center gap-2">
           <h3>Vocal</h3>
-          <input type="checkbox" defaultChecked />
+          <input type="checkbox" id="vocals" className="checkbox" defaultChecked onChange={handleCheck}/>
         </div>
         <div className="border w-3/4 py-2 rounded-2xl flex justify-center gap-2">
           <h3>Drums</h3>
-          <input type="checkbox" defaultChecked />
+          <input type="checkbox" id="drums" className="checkbox" defaultChecked onChange={handleCheck}/>
+        </div>
+        <div className="border w-3/4 py-2 rounded-2xl flex justify-center gap-2">
+          <h3>Bass</h3>
+          <input type="checkbox" id="bass" className="checkbox" defaultChecked onChange={handleCheck}/>
         </div>
         <div className="border w-3/4 py-2 rounded-2xl flex justify-center gap-2">
           <h3>Others</h3>
-          <input type="checkbox" defaultChecked />
+          <input type="checkbox" id="other" className="checkbox" defaultChecked onChange={handleCheck}/>
         </div>
         
       </div>
@@ -160,12 +184,14 @@ function UploadStep2({ onBack, onProceed }: UploadStep2Props) {
 }
 
 interface UploadStep3Props {
+  upload_progress: UploadState
   audioContainerRef: React.RefObject<HTMLDivElement>;
   onDownload: () => void;
   onBack: () => void;
 }
 
-function UploadStep3({ audioContainerRef, onDownload, onBack }: UploadStep3Props) {
+function UploadStep3({ upload_progress, audioContainerRef, onDownload, onBack }: UploadStep3Props) {
+  const inProcess = upload_progress != "SUCCESS" && upload_progress != "FAILURE" && upload_progress != "IDLE"
   return (
     <div className="flex flex-col gap-5">
       <div className="topbar justify-start">
@@ -174,12 +200,27 @@ function UploadStep3({ audioContainerRef, onDownload, onBack }: UploadStep3Props
         </div>
         <div className="brand">Download Your Finished Track</div>
       </div>
-      <div className="flex flex-col border bg-gray-100 p-5" id="download" ref={audioContainerRef}>
-        <label htmlFor="track-name">Name of your track:</label>
-        <input type="text" id="track-name" name="track-name" />
-        <button className="btn-primary" onClick={onDownload}>
-          Download Track
-        </button>
+      <div className="flex justify-center h-150">
+        <div className="bg-gray-180 border m-10 w-8/12 max-w-8/12 min-h-0 flex flex-col items-center gap-1 overflow-hidden" id="download" ref={audioContainerRef}>
+          {inProcess  && 
+            <div className="flex flex-col items-center justify-center gap-3">
+              <div className="loader"></div>
+              {upload_progress == "PENDING" && <h5>Starting...</h5>}
+              {upload_progress == "READING" && <h5>Reading raw audio...</h5>}
+              {upload_progress == "COMPUTING" && <h5>Separating sources... (This can take a few minutes)</h5>}
+              {upload_progress == "UPLOADING" && <h5>Finishing up...</h5>}
+            </div>
+          }
+          {upload_progress == "SUCCESS" && 
+            <div className="flex flex-col gap-3 items-center justify-center">
+              <CheckIcon size={100}></CheckIcon>
+              <h5>Complete!</h5>
+              <button className="btn-primary" onClick={onDownload}>
+                Download Track
+              </button>
+            </div>
+          }
+        </div>
       </div>
     </div>
   );
@@ -187,10 +228,10 @@ function UploadStep3({ audioContainerRef, onDownload, onBack }: UploadStep3Props
 
 function Audio() {
 
-  const [uploadState, setUploadState] = useState<UploadState>("idle");
+  const [progress, setProgress] = useState<UploadState>("IDLE");
   const [trackResult, setTrackResult] = useState<Blob | null>(null);
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
-  const [target, setTarget] = useState<AudioType>("guitar");
+  const [target, setTarget] = useState<AudioType[]>(["guitar", "piano", "vocals", "drums", "bass", "other"]);
   const [step, setStep] = useState<Step>("2");
 
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -209,7 +250,7 @@ function Audio() {
   const handleUpload = useCallback(async () => {
     if (!selectedFile) return;
 
-    setUploadState("uploading");
+    setProgress("PENDING");
 
     const formData = new FormData();
 
@@ -226,8 +267,11 @@ function Audio() {
         body: selectedFile
       })
 
-      formData.append("target", target);
+      console.log(target)
+      target.forEach(stem => formData.append("target", stem))
       formData.append("s3_key", s3_key);
+
+      console.log(formData.get("target"))
 
       const data = await fetch("http://localhost:8000/audio", {
         method: "POST",
@@ -238,12 +282,12 @@ function Audio() {
 
       console.log(data)
 
-      const result_key = await poll_progress(data["Task_ID"])
+      const result_key = await poll_progress(data["Task_ID"], (state) => {setProgress(state)})
       console.log("Result S3_Key: ", result_key)
 
     } catch (err: unknown) {
       console.error(err);
-      setUploadState("error");
+      setProgress("FAILURE");
     }
   }, [selectedFile, target]);
 
@@ -292,6 +336,7 @@ function Audio() {
       )}
       {step === "3" && (
         <UploadStep3
+          upload_progress={progress}
           audioContainerRef={audioContainerRef}
           onDownload={handleDownload}
           onBack={() => setStep("2")}

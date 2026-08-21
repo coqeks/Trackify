@@ -10,7 +10,7 @@ from botocore.exceptions import ClientError
 app = Celery("tasks", broker="redis://localhost:6379/0", backend="redis://localhost:6379/0")        
 
 @app.task(bind=True)
-def separate(self: Task, s3_key: str, target: str):
+def separate(self: Task, s3_key: str, target: list):
     work_dir = None
     try:
 
@@ -21,6 +21,8 @@ def separate(self: Task, s3_key: str, target: str):
         response = cloud.read_object(s3_key)
         raw_audio = response['Body']
         content_type = response['ContentType']
+
+        cloud.remove_object(s3_key)
 
         self.update_state(
             state='COMPUTING'

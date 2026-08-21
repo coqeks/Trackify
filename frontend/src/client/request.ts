@@ -1,3 +1,4 @@
+import type React from "react";
 import apiClient from "./apiClient"
 
 export interface User {
@@ -62,15 +63,19 @@ export const request_separation = async (formData) => {
     }
 }
 
-export const poll_progress = async (task_id: string) => {
+export const poll_progress = async (task_id: string, setProgress: any) => {
     while (true) {
         const response = await apiClient.get("/audio/" + task_id);
         if (response["Status"] == "SUCCESS") {
             console.log("Separation task finished.")
+            setProgress("SUCCESS")
             return response["s3_Key"]
-        } else if (response["Statis"] == "FAILED") {
+        } else if (response["Status"] == "FAILURE") {
             console.log("Separation task failed.")
-            return 1
+            setProgress("FAILURE")
+            return 1 
+        } else {
+            setProgress(response["Status"])
         }
         await new Promise(resolve => setTimeout(resolve, 2000));
     }

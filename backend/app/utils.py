@@ -59,22 +59,27 @@ def _read_streaming_body(body: StreamingBody) -> bytes:
 
 
 #Example: ["guitar.wav", "vocal.wav", "piano.wav", "drums.wav"]
-def combine_stems(filePaths: list):
+def combine_stems(file_paths: list, output_path: Path):
     """Combines separated stem audio using pydub's overlay() method.
     Currently not used"""
-    base_audio = AudioSegment.from_file(filePaths[0])
-    if len(filePaths) > 1:
-        for path in filePaths[1:]:
-            next_audio = AudioSegment.from_file(path)
-            base_audio = base_audio.overlay(next_audio, position=0)
-    return base_audio.export("result.wav", format="wav")
+    if not file_paths:
+        raise ValueError("combine_stems requires at least one stem file path.")
+ 
+    base_audio = AudioSegment.from_file(file_paths[0])
+    for path in file_paths[1:]:
+        next_audio = AudioSegment.from_file(path)
+        base_audio = base_audio.overlay(next_audio, position=0)
+ 
+    base_audio.export(output_path, format="wav")
+    return output_path
+
 
 
 async def separate_stem(
     body: StreamingBody,
     content_type: str,
     filename: str,
-    target
+    target: list
 ):
 
     #Verify content_type is allowed
@@ -105,7 +110,6 @@ async def separate_stem(
             cmd = [
                 "python", "-m", "demucs",
                 "-n", DEMUCS_MODEL,
-                "--two-stems", target,
                 "-o", str(output_dir),
                 str(input_path),
             ]
@@ -121,10 +125,29 @@ async def separate_stem(
                 )
 
         track_stem = input_path.stem
-        result_path = output_dir / DEMUCS_MODEL / track_stem / f"{target}.wav"
+        stem_dir = output_dir / DEMUCS_MODEL / track_stem
+
+        stem_paths = []
+        missing = []
+        for stem_name in target:
+            stem_path = stem_dir / f"{stem_name}.wav"
+            if stem_path.exists():
+                stem_paths.append(stem_path)
+            else:
+                missing.append(stem_name)
+ 
+        if missing:
+            raise HTTPException(
+                status_code=500,
+                detail=f"Backing track file(s) not found after processing: {', '.join(missing)}.",
+            )
+ 
+        result_path = stem_dir / f"combined_{'_'.join(target)}.wav"
+        await asyncio.to_thread(combine_stems, stem_paths, result_path)
 
         if not result_path.exists():
             raise HTTPException(status_code=500, detail="Backing track files not found after processing.")
+        
         print("Completed")
         return result_path, work_dir
 
