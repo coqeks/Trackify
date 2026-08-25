@@ -135,6 +135,13 @@ function UploadStep2({ target, onTargetChange, onBack, onProceed }: UploadStep2P
     }
     onTargetChange(included as AudioType[])
   }
+
+  useEffect(() => {
+    const checkBoxes = document.querySelectorAll('.checkbox')
+    checkBoxes.forEach((checkBox: HTMLInputElement) => {
+      checkBox.checked = included.includes(checkBox.id as AudioType)
+    })
+  }, [])
   
   return (
     <div className="flex flex-col gap-5">
