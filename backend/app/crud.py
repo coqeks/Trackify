@@ -23,12 +23,4 @@ def create_user(db: Session, user_in: schemas.UserCreate) -> models.User:
     db.refresh(db_user)
     return db_user
 
-def create_post(db: Session, post_in: models.PostCreate, uploader_user: models.User) -> models.PostBase:
-    db.add(post_in)
-    try:
-        db.commit()
-        db.refresh(post_in)
-    except:
-        return None
-    return post_in
 

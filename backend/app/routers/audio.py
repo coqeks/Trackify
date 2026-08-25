@@ -16,13 +16,12 @@ router = APIRouter(prefix="/audio", tags=["audio"])
 
 @router.get("/upload")
 def read_audio(current_user=Depends(get_current_user)):
-    print(current_user)
     unique_id = uuid.uuid4()
     key = f"uploads/raw/{unique_id}"
     return cloud.generate_signed_url(key, "put")
 
 @router.post("/")
-def queue_process(payload: schemas.SeparationDetail):
+def queue_process(payload: schemas.SeparationDetail, current_user=Depends(get_current_user)):
     target = payload.target
     s3_key = payload.s3_key
     print("Targets: ", target )
@@ -31,7 +30,7 @@ def queue_process(payload: schemas.SeparationDetail):
     return {"Status": "Task Queued", "Key": s3_key, "Task_ID": result.id}
 
 @router.get("/{task_id}")
-def read_process(task_id):
+def read_process(task_id, current_user=Depends(get_current_user)):
     
     result = AsyncResult(task_id, app=app)
     print(f"Status for {task_id}: {result.status}")

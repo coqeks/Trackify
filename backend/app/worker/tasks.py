@@ -12,7 +12,12 @@ import uuid
 
 from botocore.exceptions import ClientError
 
-app = Celery("tasks", broker="redis://localhost:6379/0", backend="redis://localhost:6379/0")        
+import os
+from dotenv import load_dotenv
+load_dotenv()
+
+broker_url = str(os.getenv("BROKER_URL"))
+app = Celery("tasks", broker=broker_url, backend=broker_url)        
 
 @app.task(bind=True)
 def separate(self: Task, s3_key: str, target: list):

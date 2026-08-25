@@ -33,8 +33,9 @@ def upload_file(file_path, key):
         s3_client.upload_file(
             file_path, BUCKET_NAME, key
         )
-    except:
-        print("[Cloud Upload] Something went wrong")
+    except ClientError as e:
+        error_message = e.response["Error"]["Message"]
+        HTTPException(status_code=500, detail=str(error_message))
 
 def remove_object(key: str):
     try:
@@ -42,8 +43,9 @@ def remove_object(key: str):
             Bucket = BUCKET_NAME,
             Key = key
         )
-    except:
-        print("[Cloud] Something went wrong: ", response)
+    except ClientError as e:
+        error_message = e.response["Error"]["Message"]
+        HTTPException(status_code=500, detail=str(error_message))
 
 def read_object(key: str):
     try: 
@@ -52,10 +54,10 @@ def read_object(key: str):
             Key = key
         )
         return response
-    except ClientError as error:
-        print(error.response['Error']['Code'])
-        print(error.response['Error']['Message'])
-        raise error
+    except ClientError as e:
+        error_message = e.response["Error"]["Message"]
+        HTTPException(status_code=500, detail=str(error_message))
+
     
 def generate_signed_url(s3_key: str, method: str):
 
@@ -69,7 +71,8 @@ def generate_signed_url(s3_key: str, method: str):
             ExpiresIn=300
         )
     except ClientError as e:
-        raise HTTPException(status_code=500, detail=str(e))
+        error_message = e.response["Error"]["Message"]
+        HTTPException(status_code=500, detail=str(error_message))
     
     return {
         "signed_url": presigned_url,
