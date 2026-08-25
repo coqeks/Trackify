@@ -14,6 +14,11 @@ export interface AuthResponse {
     user: User;
 }
 
+export interface CloudResponse {
+    signed_url: string;
+    s3_key: string;
+}
+
 export const read_user = async () => {
     console.log("Reading user")
     const data = await apiClient.get<User>("/auth/me");
@@ -36,5 +41,41 @@ export const signup = async (formData) => {
     } catch (error) {
         console.log(error.status)
         throw error
+    }
+}
+
+export const get_purl = async () => {
+    try {
+        const response = await apiClient.get<CloudResponse>("/audio/upload");
+        return response;
+    } catch (error) {
+        throw error;
+    }
+}
+
+export const request_separation = async (payload: {target: string[], s3_key: string}) => {
+    try {
+        const response = await apiClient.post("/audio", payload);
+        return response;
+    } catch (error) {
+        throw error;
+    }
+}
+
+export const poll_progress = async (task_id: string, setProgress: any) => {
+    while (true) {
+        const response = await apiClient.get("/audio/" + task_id);
+        if (response["Status"] == "SUCCESS") {
+            console.log("Separation task finished.")
+            setProgress("SUCCESS")
+            return response["result_url"]
+        } else if (response["Status"] == "FAILURE") {
+            console.log("Separation task failed.")
+            setProgress("FAILURE")
+            return 1 
+        } else {
+            setProgress(response["Status"])
+        }
+        await new Promise(resolve => setTimeout(resolve, 2000));
     }
 }

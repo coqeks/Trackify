@@ -1,3 +1,9 @@
+"""
+@file:       schemas.py
+@summary:    Defines schemas for API request and response payloads
+"""
+
+
 from datetime import datetime
 from pydantic import BaseModel, EmailStr, ConfigDict, field_validator
 
@@ -38,3 +44,7 @@ class Token(BaseModel):
 
 class TokenPayload(BaseModel):
     sub: str | None = None
+
+class SeparationDetail(BaseModel):
+    target: list[str]
+    s3_key: str

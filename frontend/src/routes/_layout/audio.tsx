@@ -1,14 +1,18 @@
-import useAuth from "../../hooks/useAuth";
-import { useState, useRef, useCallback } from "react";
-import { createFileRoute, useNavigate } from "@tanstack/react-router";
+import { get_purl, request_separation, poll_progress } from "../../client/request"
+import { useState, useRef, useCallback, useEffect } from "react";
+import { createFileRoute} from "@tanstack/react-router";
+
+import { motion, AnimatePresence } from "motion/react" 
 import { 
   FileAudio, 
   ArrowLeft,
-  ArrowRight
+  ArrowRight,
+  CheckIcon,
+  Frown
 } from "lucide-react";
 
-type UploadState = "idle" | "uploading" | "success" | "error";
-type AudioType = "guitar" | "piano" | "drums" | "bass" | "vocals";
+type UploadState = "IDLE" | "PENDING" | "COMPUTING" | "UPLOADING" | "READING" | "SUCCESS" | "FAILURE";
+type AudioType = "guitar" | "piano" | "drums" | "bass" | "vocals" | "other";
 type Step = "1" | "2" | "3";
 
 const allowedFileType = [
@@ -105,13 +109,32 @@ function UploadStep1({
 }
 
 interface UploadStep2Props {
-  target: AudioType;
-  onTargetChange: (t: AudioType) => void;
+  target: AudioType[]
+  onTargetChange: (t: AudioType[]) => void;
   onBack: () => void;
   onProceed: () => void;
 }
 
-function UploadStep2({ onBack, onProceed }: UploadStep2Props) {
+function UploadStep2({ target, onTargetChange, onBack, onProceed }: UploadStep2Props) {
+
+  let included = target
+  
+  const handleCheck = (e: React.ChangeEvent) => {
+    const target = e.target as HTMLInputElement;
+    if (target.checked == false) {
+      if (included.length <= 1) {
+        console.log("You need at least one source in your track.");
+        target.checked = true;
+      } else {
+        included = included.filter(item => item != target.id)
+        console.log(included)
+      }
+    } else if (target.checked == true) {
+      included.push(target.id as AudioType)
+      console.log(included)
+    }
+    onTargetChange(included as AudioType[])
+  }
   
   return (
     <div className="flex flex-col gap-5">
@@ -128,23 +151,27 @@ function UploadStep2({ onBack, onProceed }: UploadStep2Props) {
       <div className="grid grid-cols-2 sm:grid-cols-2 gap-y-5 columns place-items-center">
         <div className="border w-3/4 py-2 rounded-2xl flex justify-center gap-2">
           <h3>Guitar</h3>
-          <input type="checkbox" defaultChecked />
+          <input type="checkbox" id="guitar" className="checkbox" defaultChecked onChange={handleCheck} />
         </div>
         <div className="border w-3/4 py-2 rounded-2xl flex justify-center gap-2">
           <h3>Piano</h3>
-          <input type="checkbox" defaultChecked />
+          <input type="checkbox" id="piano" className="checkbox" defaultChecked onChange={handleCheck}/>
         </div>
         <div className="border w-3/4 py-2 rounded-2xl flex justify-center gap-2">
           <h3>Vocal</h3>
-          <input type="checkbox" defaultChecked />
+          <input type="checkbox" id="vocals" className="checkbox" defaultChecked onChange={handleCheck}/>
         </div>
         <div className="border w-3/4 py-2 rounded-2xl flex justify-center gap-2">
           <h3>Drums</h3>
-          <input type="checkbox" defaultChecked />
+          <input type="checkbox" id="drums" className="checkbox" defaultChecked onChange={handleCheck}/>
+        </div>
+        <div className="border w-3/4 py-2 rounded-2xl flex justify-center gap-2">
+          <h3>Bass</h3>
+          <input type="checkbox" id="bass" className="checkbox" defaultChecked onChange={handleCheck}/>
         </div>
         <div className="border w-3/4 py-2 rounded-2xl flex justify-center gap-2">
           <h3>Others</h3>
-          <input type="checkbox" defaultChecked />
+          <input type="checkbox" id="other" className="checkbox" defaultChecked onChange={handleCheck}/>
         </div>
         
       </div>
@@ -159,12 +186,15 @@ function UploadStep2({ onBack, onProceed }: UploadStep2Props) {
 }
 
 interface UploadStep3Props {
-  audioContainerRef: React.RefObject<HTMLDivElement>;
+  upload_progress: UploadState;
+  audioUrl: string | null;
+  showComplete: boolean;
   onDownload: () => void;
   onBack: () => void;
 }
 
-function UploadStep3({ audioContainerRef, onDownload, onBack }: UploadStep3Props) {
+function UploadStep3({ upload_progress, audioUrl, showComplete, onDownload, onBack }: UploadStep3Props) {
+  const inProcess = upload_progress != "SUCCESS" && upload_progress != "FAILURE" && upload_progress != "IDLE"
   return (
     <div className="flex flex-col gap-5">
       <div className="topbar justify-start">
@@ -173,12 +203,70 @@ function UploadStep3({ audioContainerRef, onDownload, onBack }: UploadStep3Props
         </div>
         <div className="brand">Download Your Finished Track</div>
       </div>
-      <div className="flex flex-col border bg-gray-100 p-5" id="download" ref={audioContainerRef}>
-        <label htmlFor="track-name">Name of your track:</label>
-        <input type="text" id="track-name" name="track-name" />
-        <button className="btn-primary" onClick={onDownload}>
-          Download Track
-        </button>
+      <div className="flex justify-center h-150">
+        <div className="bg-gray-180 border m-10 w-8/12 max-w-8/12 min-h-0 flex flex-col items-center gap-1 overflow-hidden" id="download">
+          {inProcess  && 
+            <div className="flex flex-col items-center justify-center gap-3">
+              <div className="loader"></div>
+              {upload_progress == "PENDING" && <h5>Starting...</h5>}
+              {upload_progress == "READING" && <h5>Reading raw audio...</h5>}
+              {upload_progress == "COMPUTING" && <h5>Separating sources... (This can take a few minutes)</h5>}
+              {upload_progress == "UPLOADING" && <h5>Finishing up...</h5>}
+            </div>
+          }
+          {upload_progress == "SUCCESS" && (
+             <motion.div layout className="flex flex-col items-center gap-4 w-full">
+              <AnimatePresence mode="popLayout">
+                {showComplete && (
+                  <motion.div
+                    key="complete-badge"
+                    layout
+                    className="flex flex-col items-center gap-1"
+                    initial={{ opacity: 0, scale: 0 }}
+                    animate={{ opacity: 1, scale: 1 }}
+                    exit={{ opacity: 0, scale: 0.6 }}
+                    transition={{
+                      type: "spring",
+                      visualDuration: 0.4,
+                      bounce: 0.5,
+                    }}
+                  >
+                    <CheckIcon size={100} />
+                    <h5>Complete!</h5>
+                  </motion.div>
+                )}
+              </AnimatePresence>
+
+             {audioUrl && (
+               <motion.div
+                 layout
+                 className="flex flex-col gap-3 items-center justify-center w-full px-8"
+                 initial={{ opacity: 0, y: 12 }}
+                 animate={{ opacity: 1, y: 0 }}
+                 transition={{
+                   layout: { type: "spring", visualDuration: 0.4, bounce: 0.3 },
+                   opacity: { duration: 0.4, delay: 0.15 },
+                   y: { duration: 0.4, delay: 0.15 },
+                 }}
+               >
+                 <audio src={audioUrl} controls className="w-full" />
+                 <button className="btn-primary" onClick={onDownload}>
+                   Download Track
+                 </button>
+               </motion.div>
+             )}
+           </motion.div>
+          )}
+          {upload_progress == "FAILURE" && 
+            <div className="flex flex-col gap-3 items-center justify-center">
+              <Frown size={100} />
+              <h5>Something went wrong...</h5>
+              <button className="btn-primary" onClick={onBack}>
+                Try Again
+              </button>
+            </div>
+          }
+        </div>
       </div>
     </div>
   );
@@ -186,53 +274,74 @@ function UploadStep3({ audioContainerRef, onDownload, onBack }: UploadStep3Props
 
 function Audio() {
 
-  const [uploadState, setUploadState] = useState<UploadState>("idle");
+  const [progress, setProgress] = useState<UploadState>("IDLE");
+
   const [trackResult, setTrackResult] = useState<Blob | null>(null);
+
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
-  const [target, setTarget] = useState<AudioType>("guitar");
-  const [step, setStep] = useState<Step>("2");
+
+  const [target, setTarget] = useState<AudioType[]>(["guitar", "piano", "vocals", "drums", "bass", "other"]);
+
+  const [step, setStep] = useState<Step>("1");
+
+  const [showComplete, setShowComplete] = useState<boolean>(false);
+
+  const [audioUrl, setAudioUrl] = useState<string | null>(null);
 
   const fileInputRef = useRef<HTMLInputElement>(null);
-  const audioContainerRef = useRef<HTMLDivElement>(null);
 
-  const createPlayback = (blob: Blob) => {
-    const container = audioContainerRef.current;
-    if (!container) return;
-    const blobURL = URL.createObjectURL(blob);
-    const audioPlayer = document.createElement("audio");
-    audioPlayer.src = blobURL;
-    audioPlayer.controls = true;
-    container.appendChild(audioPlayer);
-  };
+  useEffect(() => {
+    if (!trackResult) {
+      setAudioUrl(null);
+      return;
+    }
+    const url = URL.createObjectURL(trackResult);
+    setAudioUrl(url);
+    return () => URL.revokeObjectURL(url);
+  }, [trackResult]);
+  
+  useEffect(() => {
+    if (progress !== "SUCCESS") {
+      setShowComplete(false);
+      return;
+    }
+    setShowComplete(true);
+    const timer = setTimeout(() => setShowComplete(false), 1600);
+    return () => clearTimeout(timer);
+  }, [progress])
 
   const handleUpload = useCallback(async () => {
     if (!selectedFile) return;
 
-    setUploadState("uploading");
-
-    const formData = new FormData();
-    formData.append("file", selectedFile);
-    formData.append("target", target);
+    setProgress("PENDING");
 
     try {
-      const res = await fetch("http://localhost:8000/audio", {
-        method: "POST",
-        body: formData,
-      });
+      const { signed_url, s3_key} = await get_purl() 
+      console.log(signed_url, s3_key)
 
-      if (!res.ok) {
-        const err = await res.json();
-        throw new Error(err.detail);
+      if (selectedFile.size > 10485760) {
+        throw new Error("File size is too large")
       }
 
-      const audio = await res.blob();
-      setTrackResult(audio);
-      setUploadState("success");
-      // wait a tick so UploadStep3 (and its ref) is mounted before we append the player
-      requestAnimationFrame(() => createPlayback(audio));
+      await fetch(signed_url, {
+        method: "PUT",
+        body: selectedFile
+      })
+      console.log(target)
+      const data = await request_separation({target, s3_key})
+
+      const result_url = await poll_progress(data["Task_ID"], (state) => {setProgress(state)})
+
+      const response = await fetch(result_url, {
+        method: "GET",
+      })
+
+      const audio_blob = await response.blob()
+      setTrackResult(audio_blob)
+
     } catch (err: unknown) {
       console.error(err);
-      setUploadState("error");
+      setProgress("FAILURE");
     }
   }, [selectedFile, target]);
 
@@ -281,7 +390,9 @@ function Audio() {
       )}
       {step === "3" && (
         <UploadStep3
-          audioContainerRef={audioContainerRef}
+          upload_progress={progress}
+          audioUrl={audioUrl}
+          showComplete={showComplete}
           onDownload={handleDownload}
           onBack={() => setStep("2")}
         />
