@@ -12,6 +12,8 @@ ACCESS_KEY_ID = os.getenv("ACCESS_KEY_ID")
 SECRET_ACCESS_KEY = os.getenv("SECRET_ACCESS_KEY")
 BUCKET_NAME = os.getenv("BUCKET_NAME")
 
+ALLOWED_METHODS = ["get", "put"]
+
 # Connect to Cloudflare R2 using the S3 interface
 s3_client = boto3.client(
     "s3",
@@ -55,13 +57,14 @@ def read_object(key: str):
         print(error.response['Error']['Message'])
         raise error
     
-def generate_upload_url(fileID: str):
+def generate_signed_url(s3_key: str, method: str):
 
-    s3_key = f"uploads/raw/{fileID}"
+    if method not in ALLOWED_METHODS:
+        raise HTTPException(status_code=500, detail="500 Internal Server Error: Invalid Cloud Method")
 
     try:
         presigned_url = s3_client.generate_presigned_url(
-            'put_object',
+            f'{method}_object',
             Params={'Bucket': BUCKET_NAME, 'Key': s3_key},
             ExpiresIn=300
         )
@@ -69,6 +72,7 @@ def generate_upload_url(fileID: str):
         raise HTTPException(status_code=500, detail=str(e))
     
     return {
-        "upload_url": presigned_url,
+        "signed_url": presigned_url,
         "s3_key": s3_key
     }
+

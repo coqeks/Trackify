@@ -1,13 +1,15 @@
 import { get_purl, request_separation, poll_progress } from "../../client/request"
-import { useState, useRef, useCallback } from "react";
+import { useState, useRef, useCallback, useEffect } from "react";
 import { createFileRoute} from "@tanstack/react-router";
+
+import { motion, AnimatePresence } from "motion/react" 
 import { 
   FileAudio, 
   ArrowLeft,
   ArrowRight,
-  CheckIcon
+  CheckIcon,
+  Frown
 } from "lucide-react";
-import type { JsonResponse } from "@tanstack/react-router/ssr/client";
 
 type UploadState = "IDLE" | "PENDING" | "COMPUTING" | "UPLOADING" | "READING" | "SUCCESS" | "FAILURE";
 type AudioType = "guitar" | "piano" | "drums" | "bass" | "vocals" | "other";
@@ -184,13 +186,14 @@ function UploadStep2({ target, onTargetChange, onBack, onProceed }: UploadStep2P
 }
 
 interface UploadStep3Props {
-  upload_progress: UploadState
-  audioContainerRef: React.RefObject<HTMLDivElement>;
+  upload_progress: UploadState;
+  audioUrl: string | null;
+  showComplete: boolean;
   onDownload: () => void;
   onBack: () => void;
 }
 
-function UploadStep3({ upload_progress, audioContainerRef, onDownload, onBack }: UploadStep3Props) {
+function UploadStep3({ upload_progress, audioUrl, showComplete, onDownload, onBack }: UploadStep3Props) {
   const inProcess = upload_progress != "SUCCESS" && upload_progress != "FAILURE" && upload_progress != "IDLE"
   return (
     <div className="flex flex-col gap-5">
@@ -201,7 +204,7 @@ function UploadStep3({ upload_progress, audioContainerRef, onDownload, onBack }:
         <div className="brand">Download Your Finished Track</div>
       </div>
       <div className="flex justify-center h-150">
-        <div className="bg-gray-180 border m-10 w-8/12 max-w-8/12 min-h-0 flex flex-col items-center gap-1 overflow-hidden" id="download" ref={audioContainerRef}>
+        <div className="bg-gray-180 border m-10 w-8/12 max-w-8/12 min-h-0 flex flex-col items-center gap-1 overflow-hidden" id="download">
           {inProcess  && 
             <div className="flex flex-col items-center justify-center gap-3">
               <div className="loader"></div>
@@ -211,12 +214,55 @@ function UploadStep3({ upload_progress, audioContainerRef, onDownload, onBack }:
               {upload_progress == "UPLOADING" && <h5>Finishing up...</h5>}
             </div>
           }
-          {upload_progress == "SUCCESS" && 
+          {upload_progress == "SUCCESS" && (
+             <motion.div layout className="flex flex-col items-center gap-4 w-full">
+              <AnimatePresence mode="popLayout">
+                {showComplete && (
+                  <motion.div
+                    key="complete-badge"
+                    layout
+                    className="flex flex-col items-center gap-1"
+                    initial={{ opacity: 0, scale: 0 }}
+                    animate={{ opacity: 1, scale: 1 }}
+                    exit={{ opacity: 0, scale: 0.6 }}
+                    transition={{
+                      type: "spring",
+                      visualDuration: 0.4,
+                      bounce: 0.5,
+                    }}
+                  >
+                    <CheckIcon size={100} />
+                    <h5>Complete!</h5>
+                  </motion.div>
+                )}
+              </AnimatePresence>
+
+             {audioUrl && (
+               <motion.div
+                 layout
+                 className="flex flex-col gap-3 items-center justify-center w-full px-8"
+                 initial={{ opacity: 0, y: 12 }}
+                 animate={{ opacity: 1, y: 0 }}
+                 transition={{
+                   layout: { type: "spring", visualDuration: 0.4, bounce: 0.3 },
+                   opacity: { duration: 0.4, delay: 0.15 },
+                   y: { duration: 0.4, delay: 0.15 },
+                 }}
+               >
+                 <audio src={audioUrl} controls className="w-full" />
+                 <button className="btn-primary" onClick={onDownload}>
+                   Download Track
+                 </button>
+               </motion.div>
+             )}
+           </motion.div>
+          )}
+          {upload_progress == "FAILURE" && 
             <div className="flex flex-col gap-3 items-center justify-center">
-              <CheckIcon size={100}></CheckIcon>
-              <h5>Complete!</h5>
-              <button className="btn-primary" onClick={onDownload}>
-                Download Track
+              <Frown size={100} />
+              <h5>Something went wrong...</h5>
+              <button className="btn-primary" onClick={onBack}>
+                Try Again
               </button>
             </div>
           }
@@ -229,61 +275,69 @@ function UploadStep3({ upload_progress, audioContainerRef, onDownload, onBack }:
 function Audio() {
 
   const [progress, setProgress] = useState<UploadState>("IDLE");
+
   const [trackResult, setTrackResult] = useState<Blob | null>(null);
+
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
+
   const [target, setTarget] = useState<AudioType[]>(["guitar", "piano", "vocals", "drums", "bass", "other"]);
-  const [step, setStep] = useState<Step>("2");
+
+  const [step, setStep] = useState<Step>("1");
+
+  const [showComplete, setShowComplete] = useState<boolean>(false);
+
+  const [audioUrl, setAudioUrl] = useState<string | null>(null);
 
   const fileInputRef = useRef<HTMLInputElement>(null);
-  const audioContainerRef = useRef<HTMLDivElement>(null);
 
-  const createPlayback = (blob: Blob) => {
-    const container = audioContainerRef.current;
-    if (!container) return;
-    const blobURL = URL.createObjectURL(blob);
-    const audioPlayer = document.createElement("audio");
-    audioPlayer.src = blobURL;
-    audioPlayer.controls = true;
-    container.appendChild(audioPlayer);
-  };
+  useEffect(() => {
+    if (!trackResult) {
+      setAudioUrl(null);
+      return;
+    }
+    const url = URL.createObjectURL(trackResult);
+    setAudioUrl(url);
+    return () => URL.revokeObjectURL(url);
+  }, [trackResult]);
+  
+  useEffect(() => {
+    if (progress !== "SUCCESS") {
+      setShowComplete(false);
+      return;
+    }
+    setShowComplete(true);
+    const timer = setTimeout(() => setShowComplete(false), 1600);
+    return () => clearTimeout(timer);
+  }, [progress])
 
   const handleUpload = useCallback(async () => {
     if (!selectedFile) return;
 
     setProgress("PENDING");
 
-    const formData = new FormData();
-
     try {
-      const { upload_url, s3_key } = await get_purl() 
-      console.log(upload_url)
+      const { signed_url, s3_key} = await get_purl() 
+      console.log(signed_url, s3_key)
 
       if (selectedFile.size > 10485760) {
         throw new Error("File size is too large")
       }
 
-      await fetch(upload_url, {
+      await fetch(signed_url, {
         method: "PUT",
         body: selectedFile
       })
-
       console.log(target)
-      target.forEach(stem => formData.append("target", stem))
-      formData.append("s3_key", s3_key);
+      const data = await request_separation({target, s3_key})
 
-      console.log(formData.get("target"))
+      const result_url = await poll_progress(data["Task_ID"], (state) => {setProgress(state)})
 
-      const data = await fetch("http://localhost:8000/audio", {
-        method: "POST",
-        body: formData
-      }).then(
-        (response) => {return response.json()}
-      )
+      const response = await fetch(result_url, {
+        method: "GET",
+      })
 
-      console.log(data)
-
-      const result_key = await poll_progress(data["Task_ID"], (state) => {setProgress(state)})
-      console.log("Result S3_Key: ", result_key)
+      const audio_blob = await response.blob()
+      setTrackResult(audio_blob)
 
     } catch (err: unknown) {
       console.error(err);
@@ -337,7 +391,8 @@ function Audio() {
       {step === "3" && (
         <UploadStep3
           upload_progress={progress}
-          audioContainerRef={audioContainerRef}
+          audioUrl={audioUrl}
+          showComplete={showComplete}
           onDownload={handleDownload}
           onBack={() => setStep("2")}
         />

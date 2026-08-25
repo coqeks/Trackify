@@ -1,3 +1,8 @@
+"""
+@file:       tasks.py
+@summary:    Instructions for celery worker
+"""
+
 from celery import Celery, Task
 from app.utils import separate_stem, _cleanup
 from app import cloud
@@ -11,6 +16,18 @@ app = Celery("tasks", broker="redis://localhost:6379/0", backend="redis://localh
 
 @app.task(bind=True)
 def separate(self: Task, s3_key: str, target: list):
+    """""
+    Reads raw bytes and content type of raw audio from cloud storage, 
+    separates the audio, uploads the result and return its cloud key.
+
+    Parameters:
+        self (Task): The current task instance.
+        s3_key (str): The location of the raw audio file in cloud storage.
+        target (list[str]): Stems to keep in result audio.
+
+    Returns:
+        String: Key to the result audio in cloud storage.
+    """""
     work_dir = None
     try:
 
@@ -51,3 +68,4 @@ def separate(self: Task, s3_key: str, target: list):
     finally:
         if work_dir:
             _cleanup(work_dir)
+        

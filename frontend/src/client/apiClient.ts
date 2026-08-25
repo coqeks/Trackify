@@ -32,16 +32,17 @@ async function apiFetch<T>(path: string, options: RequestOptions = {}): Promise<
   
     const controller = new AbortController()
     const timeout = setTimeout(() => controller.abort(), timeoutMs)
+    const isFormData = body instanceof FormData
   
     try {
       const response = await fetch(`${API.BASE}${path}`, {
         ...rest,
         headers: {
-          "Content-Type": "application/json",
+          ...(isFormData ? {} : { "Content-Type": "application/json" }),
           ...(API.TOKEN ? { Authorization: `Bearer ${API.TOKEN}` } : {}),
           ...headers,
         },
-        body: body !== undefined ? JSON.stringify(body) : undefined,
+        body: (body !== undefined && isFormData == false ) ? JSON.stringify(body) : undefined,
         signal: controller.signal,
       })
   
