@@ -3,3 +3,7 @@ backend/.venv/
 backend/app/__pycache__/
 backend/app/routers/__pycache__/
 backend/app/worker/__pycache__/
+__pycache__/
+*.pyc
+*.pyo
+.env
