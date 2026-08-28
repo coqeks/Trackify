@@ -32,8 +32,13 @@ class UserOut(BaseModel):
     full_name: str | None = None
     is_active: bool
     created_at: datetime
+    tracks_saved: int | None = None
 
     model_config = ConfigDict(from_attributes=True)
+
+class UserTrack(BaseModel):
+    id: int
+    tracks_saved: int
 
 
 class Token(BaseModel):
@@ -45,6 +50,14 @@ class Token(BaseModel):
 class TokenPayload(BaseModel):
     sub: str | None = None
 
+class TrackIn(BaseModel):
+    file_type: str
+    file_size: int
+
 class SeparationDetail(BaseModel):
     target: list[str]
     s3_key: str
+
+class TrackCreate(BaseModel):
+    title: str
+    cloud_key: str

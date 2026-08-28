@@ -1,3 +1,4 @@
+from sqlalchemy import update
 from sqlalchemy.orm import Session
 
 from app import models, schemas, cloud
@@ -23,4 +24,27 @@ def create_user(db: Session, user_in: schemas.UserCreate) -> models.User:
     db.refresh(db_user)
     return db_user
 
+def save_track(db: Session, track_in: schemas.TrackCreate, user: models.User):
 
+    if (db.query(models.TrackBase).filter(models.TrackBase.cloud_key == track_in.cloud_key).first() != None):
+        return False
+
+    db_track = models.TrackBase(
+        title=track_in.title,
+        local_index = user.tracks_saved,
+        cloud_key=track_in.cloud_key,
+        creator_id=user.id
+    )
+    db.add(db_track)
+
+    stmt = (
+        update(models.User)
+        .where(models.User.id == user.id)
+        .values(tracks_saved=models.User.tracks_saved + 1)
+    )
+
+    db.execute(stmt)
+
+    db.commit()
+    db.refresh(db_track)
+    return db_track

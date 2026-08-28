@@ -78,4 +78,3 @@ def generate_signed_url(s3_key: str, method: str):
         "signed_url": presigned_url,
         "s3_key": s3_key
     }
-

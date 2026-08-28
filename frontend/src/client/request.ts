@@ -6,6 +6,7 @@ export interface User {
     full_name: string;
     is_active: boolean;
     created_at: Date;
+    tracks_saved: number;
 }
 
 export interface AuthResponse {
@@ -68,7 +69,7 @@ export const poll_progress = async (task_id: string, setProgress: any) => {
         if (response["Status"] == "SUCCESS") {
             console.log("Separation task finished.")
             setProgress("SUCCESS")
-            return response["result_url"]
+            return response
         } else if (response["Status"] == "FAILURE") {
             console.log("Separation task failed.")
             setProgress("FAILURE")
@@ -78,4 +79,9 @@ export const poll_progress = async (task_id: string, setProgress: any) => {
         }
         await new Promise(resolve => setTimeout(resolve, 2000));
     }
+}
+
+export const save_track = async (title: string, cloud_key: string) => {
+    const payload = { title, cloud_key }
+    return await apiClient.post("/audio/save", payload)
 }

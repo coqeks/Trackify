@@ -1,6 +1,7 @@
-import { get_purl, request_separation, poll_progress } from "../../client/request"
+import { get_purl, request_separation, poll_progress, save_track } from "../../client/request"
 import { useState, useRef, useCallback, useEffect } from "react";
 import { createFileRoute} from "@tanstack/react-router";
+import { useLayoutContext, type UploadState, type Step, type AudioType } from "../_layout";
 
 import { motion, AnimatePresence } from "motion/react" 
 import { 
@@ -10,10 +11,7 @@ import {
   CheckIcon,
   Frown
 } from "lucide-react";
-
-type UploadState = "IDLE" | "PENDING" | "COMPUTING" | "UPLOADING" | "READING" | "SUCCESS" | "FAILURE";
-type AudioType = "guitar" | "piano" | "drums" | "bass" | "vocals" | "other";
-type Step = "1" | "2" | "3";
+import { audio } from "motion/react-client";
 
 const allowedFileType = [
   "audio/mpeg",
@@ -197,10 +195,11 @@ interface UploadStep3Props {
   audioUrl: string | null;
   showComplete: boolean;
   onDownload: () => void;
+  onSave: () => void;
   onBack: () => void;
 }
 
-function UploadStep3({ upload_progress, audioUrl, showComplete, onDownload, onBack }: UploadStep3Props) {
+function UploadStep3({ upload_progress, audioUrl, showComplete, onDownload, onSave, onBack }: UploadStep3Props) {
   const inProcess = upload_progress != "SUCCESS" && upload_progress != "FAILURE" && upload_progress != "IDLE"
   return (
     <div className="flex flex-col gap-5">
@@ -260,6 +259,9 @@ function UploadStep3({ upload_progress, audioUrl, showComplete, onDownload, onBa
                  <button className="btn-primary" onClick={onDownload}>
                    Download Track
                  </button>
+                 <button className="btn-primary" onClick={onSave}>
+                   Save Track
+                 </button>
                </motion.div>
              )}
            </motion.div>
@@ -281,98 +283,18 @@ function UploadStep3({ upload_progress, audioUrl, showComplete, onDownload, onBa
 
 function Audio() {
 
-  const [progress, setProgress] = useState<UploadState>("IDLE");
-
-  const [trackResult, setTrackResult] = useState<Blob | null>(null);
-
-  const [selectedFile, setSelectedFile] = useState<File | null>(null);
-
-  const [target, setTarget] = useState<AudioType[]>(["guitar", "piano", "vocals", "drums", "bass", "other"]);
-
-  const [step, setStep] = useState<Step>("1");
-
-  const [showComplete, setShowComplete] = useState<boolean>(false);
-
-  const [audioUrl, setAudioUrl] = useState<string | null>(null);
+  const {
+    progress, selectedFile, setSelectedFile, target, setTarget,
+    step, setStep, showComplete, audioUrl, handleUpload, handleDownload, audioKey, setAudioKey
+  } = useLayoutContext();
 
   const fileInputRef = useRef<HTMLInputElement>(null);
 
-  useEffect(() => {
-    if (!trackResult) {
-      setAudioUrl(null);
-      return;
-    }
-    const url = URL.createObjectURL(trackResult);
-    setAudioUrl(url);
-    return () => URL.revokeObjectURL(url);
-  }, [trackResult]);
-  
-  useEffect(() => {
-    if (progress !== "SUCCESS") {
-      setShowComplete(false);
-      return;
-    }
-    setShowComplete(true);
-    const timer = setTimeout(() => setShowComplete(false), 1600);
-    return () => clearTimeout(timer);
-  }, [progress])
-
-  const handleUpload = useCallback(async () => {
-    if (!selectedFile) return;
-
-    setProgress("PENDING");
-
-    try {
-      const { signed_url, s3_key} = await get_purl() 
-      console.log(signed_url, s3_key)
-
-      if (selectedFile.size > 10485760) {
-        throw new Error("File size is too large")
-      }
-
-      await fetch(signed_url, {
-        method: "PUT",
-        body: selectedFile
-      })
-      console.log(target)
-      const data = await request_separation({target, s3_key})
-
-      const result_url = await poll_progress(data["Task_ID"], (state) => {setProgress(state)})
-
-      const response = await fetch(result_url, {
-        method: "GET",
-      })
-
-      const audio_blob = await response.blob()
-      setTrackResult(audio_blob)
-
-    } catch (err: unknown) {
-      console.error(err);
-      setProgress("FAILURE");
-    }
-  }, [selectedFile, target]);
-
-  const handleDownload = useCallback(async () => {
-    if (!trackResult) return;
-
-    const downloadLink = document.createElement("a");
-    downloadLink.href = window.URL.createObjectURL(trackResult);
-    downloadLink.download = "BackingTrack.mp3";
-    document.body.appendChild(downloadLink);
-    downloadLink.click();
-    downloadLink.remove();
-
-    const rootHandle = await navigator.storage.getDirectory();
-    const directoryHandle = await rootHandle.getDirectoryHandle("tracks", {
-      create: true,
-    });
-    const fileHandle = await directoryHandle.getFileHandle("audio", {
-      create: true,
-    });
-    const writable = await fileHandle.createWritable();
-    await writable.write(trackResult);
-    await writable.close();
-  }, [trackResult]);
+  const handleSave = useCallback(async () => {
+    console.log(audioKey)
+    const response = save_track("Saved_Track", audioKey)
+    console.log(response)
+  }, [audioKey])
 
   return (
     <div>
@@ -401,6 +323,7 @@ function Audio() {
           audioUrl={audioUrl}
           showComplete={showComplete}
           onDownload={handleDownload}
+          onSave={handleSave}
           onBack={() => setStep("2")}
         />
       )}

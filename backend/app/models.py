@@ -16,14 +16,16 @@ class User(Base):
     full_name = Column(String, nullable=True)
     hashed_password = Column(String, nullable=False)
     is_active = Column(Boolean, default=True)
+    tracks_saved = Column(Integer, default=0)
     created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc))
     
 class TrackBase(Base):
     __tablename__ = "tracks"
 
     id = Column(Integer, primary_key=True, index=True)
+    title = Column(String)
     local_index = Column(Integer)
     cloud_key = Column(String)
-    creator_email = Column(String, nullable=False)
+    creator_id = Column(Integer, nullable=False)
     created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc))
     
