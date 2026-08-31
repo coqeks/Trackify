@@ -4,6 +4,7 @@
 """
 
 from celery import Celery, Task
+from celery.exceptions import Ignore
 from app.utils import separate_stem, _cleanup
 from app import cloud
 from app.worker.cancel import is_cancelled, clear_cancel, CancelException
@@ -36,7 +37,9 @@ def separate(self: Task, s3_key: str, target: list):
     """""
     work_dir = None
 
-    if is_cancelled(self.request.id):
+    id = self.request.id
+
+    if is_cancelled(id):
         self.update_state(
             state='CANCELLED'
         )
@@ -45,7 +48,7 @@ def separate(self: Task, s3_key: str, target: list):
     try:
 
         self.update_state(
-            state='READING'
+            state='READING' if not is_cancelled(id) else 'CANCELLING'
         )
 
         response = cloud.read_object(s3_key)
@@ -55,7 +58,7 @@ def separate(self: Task, s3_key: str, target: list):
         cloud.remove_object(s3_key)
 
         self.update_state(
-            state='COMPUTING'
+            state='COMPUTING' if not is_cancelled(id) else 'CANCELLING'
         )
 
         result_path, work_dir = asyncio.run(
@@ -69,7 +72,7 @@ def separate(self: Task, s3_key: str, target: list):
         )
 
         self.update_state(
-            state='UPLOADING'
+            state='UPLOADING' if not is_cancelled(id) else 'CANCELLING'
         )
 
         audio_id = s3_key.split("/")[2]
@@ -82,9 +85,9 @@ def separate(self: Task, s3_key: str, target: list):
     except CancelException:
         print("Cancelled Task")
         self.update_state(
-            state='CANCELLATION'
+            state='CANCELLED'
         )
-        return 1
+        raise Ignore()
     finally:
         clear_cancel(self.request.id)
         if work_dir:

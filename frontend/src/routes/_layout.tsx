@@ -22,7 +22,7 @@ export const Route = createFileRoute("/_layout")({
   }
 });
 
-export type UploadState = "IDLE" | "PENDING" | "COMPUTING" | "UPLOADING" | "READING" | "SUCCESS" | "FAILURE";
+export type UploadState = "IDLE" | "PENDING" | "COMPUTING" | "UPLOADING" | "READING" | "SUCCESS" | "FAILURE" | "CANCELLED" | "CANCELLING";
 export type AudioType = "guitar" | "piano" | "drums" | "bass" | "vocals" | "other";
 export type Step = "1" | "2" | "3";
 
@@ -136,19 +136,21 @@ function Layout() {
       setTaskId(data["Task_ID"]);
 
       const poll_result = await poll_progress(data["Task_ID"], (state: UploadState) => setProgress(state));
-
+      if (poll_result == "CANCELLED") {
+        return
+      }
+    
       const response = await fetch(poll_result["result_url"] as string, { method: "GET" });
-
       const audio_blob = await response.blob();
-
       setTrackResult(audio_blob);
       setAudioKey(poll_result["s3_key"])
+      
 
     } catch (err: unknown) {
       console.error(err);
       setProgress("FAILURE");
     }
-  }, [selectedFile, target]);
+  }, [selectedFile, target, progress]);
 
   const handleDownload = useCallback(async () => {
     if (!trackResult) return;

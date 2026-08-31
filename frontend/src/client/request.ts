@@ -76,7 +76,8 @@ export const poll_progress = async (task_id: string, setProgress: any) => {
             return 1 
         } else if (response["Status"] == "CANCELLED") {
             console.log("Task cancelled successfully.")
-            return
+            setProgress("CANCELLED")
+            return "CANCELLED"
         } else {
             setProgress(response["Status"])
         }

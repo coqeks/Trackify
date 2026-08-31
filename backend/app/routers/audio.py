@@ -3,7 +3,7 @@ from typing import Annotated
 
 from app import crud, cloud, schemas
 from app.worker.tasks import separate, app
-from app.worker.cancel import request_cancel
+from app.worker.cancel import request_cancel, is_cancelled
 from app.deps import get_current_user, get_db
 from celery.result import AsyncResult
 
@@ -39,6 +39,11 @@ def read_process(task_id, background_task: BackgroundTasks):
     result = AsyncResult(task_id, app=app)
     print(f"Status for {task_id}: {result.status}")
 
+    if result.state == "CANCELLED":
+        return {"Status": result.state}
+    if is_cancelled(task_id):
+        return {"Status": 'CANCELLING'}
+
     if result.state == "SUCCESS":
         get = result.get() 
         url = cloud.generate_signed_url(result.result, 'get')["signed_url"]
@@ -60,5 +65,10 @@ def save_track(
 
 @router.delete("/{task_id}")
 def cancel_process(task_id):
-    request_cancel(task_id)
+    result = AsyncResult(task_id, app=app)
+    if result.state == "PENDING":
+        result.revoke()
+    else:
+        request_cancel(task_id)
+
     return {"Response": "Proc cancel requested"}

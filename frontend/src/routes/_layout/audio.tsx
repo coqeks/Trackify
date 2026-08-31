@@ -9,7 +9,7 @@ import {
   ArrowLeft,
   ArrowRight,
   CheckIcon,
-  Frown
+  Frown,
 } from "lucide-react";
 import { audio } from "motion/react-client";
 
@@ -201,7 +201,11 @@ interface UploadStep3Props {
 }
 
 function UploadStep3({ upload_progress, audioUrl, showComplete, onDownload, onSave, onBack, onCancel }: UploadStep3Props) {
-  const inProcess = upload_progress != "SUCCESS" && upload_progress != "FAILURE" && upload_progress != "IDLE"
+  const inProcess = upload_progress != "SUCCESS" 
+    && upload_progress != "FAILURE" 
+    && upload_progress != "IDLE" 
+    && upload_progress != "CANCELLED"
+    
   return (
     <div className="flex flex-col gap-5">
       <div className="topbar justify-start">
@@ -219,7 +223,8 @@ function UploadStep3({ upload_progress, audioUrl, showComplete, onDownload, onSa
               {upload_progress == "READING" && <h5>Reading raw audio...</h5>}
               {upload_progress == "COMPUTING" && <h5>Separating sources... (This can take a few minutes)</h5>}
               {upload_progress == "UPLOADING" && <h5>Finishing up...</h5>}
-              <button onClick={onCancel}>Cancel</button>
+              {upload_progress == "CANCELLING" && <h5>Cancelling...</h5>}
+              {(upload_progress != "UPLOADING" && upload_progress != "CANCELLING") &&  <button onClick={onCancel}>Cancel</button>}
             </div>
           }
           {upload_progress == "SUCCESS" && (
@@ -277,6 +282,15 @@ function UploadStep3({ upload_progress, audioUrl, showComplete, onDownload, onSa
               </button>
             </div>
           }
+          {upload_progress == "CANCELLED" &&
+            <div className="flex flex-col gap-3 items-center justify-center">
+            <CheckIcon size={100} />
+            <h5>Cancelled Successfully!</h5>
+            <button className="btn-primary" onClick={onBack}>
+              Go Back
+            </button>
+          </div>
+          }
         </div>
       </div>
     </div>
@@ -286,7 +300,7 @@ function UploadStep3({ upload_progress, audioUrl, showComplete, onDownload, onSa
 function Audio() {
 
   const {
-    progress, selectedFile, setSelectedFile, target, setTarget,
+    progress,setProgress, selectedFile, setSelectedFile, target, setTarget,
     step, setStep, showComplete, audioUrl, handleUpload, handleDownload, taskId, audioKey
   } = useLayoutContext();
 
@@ -301,6 +315,7 @@ function Audio() {
   const handleCancel = useCallback(async () => {
     console.log(taskId)
     cancel_progress(taskId)
+    setProgress("CANCELLING")
   }, [taskId])
 
   return (
