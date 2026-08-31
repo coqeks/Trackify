@@ -6,6 +6,7 @@
 from celery import Celery, Task
 from app.utils import separate_stem, _cleanup
 from app import cloud
+from app.worker.cancel import is_cancelled, clear_cancel, CancelException
 
 import asyncio
 import uuid
@@ -34,6 +35,13 @@ def separate(self: Task, s3_key: str, target: list):
         String: Key to the result audio in cloud storage.
     """""
     work_dir = None
+
+    if is_cancelled(self.request.id):
+        self.update_state(
+            state='CANCELLED'
+        )
+        return 
+
     try:
 
         self.update_state(
@@ -56,6 +64,7 @@ def separate(self: Task, s3_key: str, target: list):
                 content_type=content_type,
                 filename=s3_key,
                 target=target,
+                task_id=self.request.id
             )
         )
 
@@ -70,7 +79,14 @@ def separate(self: Task, s3_key: str, target: list):
         return key
     except ClientError as err:
         return err.response['Error']
+    except CancelException:
+        print("Cancelled Task")
+        self.update_state(
+            state='CANCELLATION'
+        )
+        return 1
     finally:
+        clear_cancel(self.request.id)
         if work_dir:
             _cleanup(work_dir)
         

@@ -3,6 +3,7 @@ from typing import Annotated
 
 from app import crud, cloud, schemas
 from app.worker.tasks import separate, app
+from app.worker.cancel import request_cancel
 from app.deps import get_current_user, get_db
 from celery.result import AsyncResult
 
@@ -33,7 +34,7 @@ def queue_process(payload: schemas.SeparationDetail):
     return {"Status": "Task Queued", "Key": s3_key, "Task_ID": result.id}
 
 @router.get("/{task_id}")
-def read_process(task_id):
+def read_process(task_id, background_task: BackgroundTasks):
     
     result = AsyncResult(task_id, app=app)
     print(f"Status for {task_id}: {result.status}")
@@ -41,7 +42,6 @@ def read_process(task_id):
     if result.state == "SUCCESS":
         get = result.get() 
         url = cloud.generate_signed_url(result.result, 'get')["signed_url"]
-
         return {"Status": "SUCCESS", "s3_key": result.result, "result_url": url}
     
     return {"Status": result.state}
@@ -58,3 +58,7 @@ def save_track(
     print(track)
     return {"Response": "Track saved"}
 
+@router.delete("/{task_id}")
+def cancel_process(task_id):
+    request_cancel(task_id)
+    return {"Response": "Proc cancel requested"}

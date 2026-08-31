@@ -8,6 +8,7 @@ from pathlib import Path
 from botocore.response import StreamingBody
 
 import app.cloud
+from app.worker.cancel import is_cancelled, CancelException
 
 from fastapi import HTTPException, BackgroundTasks
 from fastapi.responses import FileResponse
@@ -73,13 +74,22 @@ def combine_stems(file_paths: list, output_path: Path):
     base_audio.export(output_path, format="wav")
     return output_path
 
-
+#Separate PIPE draining method to read stderr from subprocess
+async def _drain(stream) -> bytes:
+    data = bytearray()
+    while True:
+        chunk = await stream.read(65536)
+        if not chunk:
+            break
+        data.extend(chunk)
+    return bytes(data)
 
 async def separate_stem(
     body: StreamingBody,
     content_type: str,
     filename: str,
-    target: list
+    target: list,
+    task_id: str
 ):
 
     #Verify content_type is allowed
@@ -114,9 +124,24 @@ async def separate_stem(
                 str(input_path),
             ]
             proc = await asyncio.create_subprocess_exec(
-                *cmd, stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.PIPE,
+                *cmd, stdout=asyncio.subprocess.DEVNULL, stderr=asyncio.subprocess.PIPE,
             )
-            stdout, stderr = await proc.communicate()
+            stderr_task = asyncio.create_task(_drain(proc.stderr))
+
+            while True:
+                try:
+                    await asyncio.wait_for(proc.wait(), timeout=2.0)
+                    break
+                except asyncio.TimeoutError:
+                    if is_cancelled(task_id):
+                        proc.kill()
+                        stderr_task.cancel()
+                        await proc.wait()
+                        raise CancelException()
+
+
+
+            stderr = await stderr_task
 
             if proc.returncode != 0:
                 raise HTTPException(
@@ -151,6 +176,9 @@ async def separate_stem(
         print("Completed")
         return result_path, work_dir
 
+    except CancelException:
+        _cleanup(work_dir)
+        raise
     except HTTPException:
         _cleanup(work_dir)
         raise

@@ -1,4 +1,4 @@
-import { get_purl, request_separation, poll_progress, save_track } from "../../client/request"
+import { cancel_progress, save_track } from "../../client/request"
 import { useState, useRef, useCallback, useEffect } from "react";
 import { createFileRoute} from "@tanstack/react-router";
 import { useLayoutContext, type UploadState, type Step, type AudioType } from "../_layout";
@@ -197,9 +197,10 @@ interface UploadStep3Props {
   onDownload: () => void;
   onSave: () => void;
   onBack: () => void;
+  onCancel: () => void;
 }
 
-function UploadStep3({ upload_progress, audioUrl, showComplete, onDownload, onSave, onBack }: UploadStep3Props) {
+function UploadStep3({ upload_progress, audioUrl, showComplete, onDownload, onSave, onBack, onCancel }: UploadStep3Props) {
   const inProcess = upload_progress != "SUCCESS" && upload_progress != "FAILURE" && upload_progress != "IDLE"
   return (
     <div className="flex flex-col gap-5">
@@ -218,6 +219,7 @@ function UploadStep3({ upload_progress, audioUrl, showComplete, onDownload, onSa
               {upload_progress == "READING" && <h5>Reading raw audio...</h5>}
               {upload_progress == "COMPUTING" && <h5>Separating sources... (This can take a few minutes)</h5>}
               {upload_progress == "UPLOADING" && <h5>Finishing up...</h5>}
+              <button onClick={onCancel}>Cancel</button>
             </div>
           }
           {upload_progress == "SUCCESS" && (
@@ -285,7 +287,7 @@ function Audio() {
 
   const {
     progress, selectedFile, setSelectedFile, target, setTarget,
-    step, setStep, showComplete, audioUrl, handleUpload, handleDownload, audioKey, setAudioKey
+    step, setStep, showComplete, audioUrl, handleUpload, handleDownload, taskId, audioKey
   } = useLayoutContext();
 
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -295,6 +297,11 @@ function Audio() {
     const response = save_track("Saved_Track", audioKey)
     console.log(response)
   }, [audioKey])
+
+  const handleCancel = useCallback(async () => {
+    console.log(taskId)
+    cancel_progress(taskId)
+  }, [taskId])
 
   return (
     <div>
@@ -325,6 +332,7 @@ function Audio() {
           onDownload={handleDownload}
           onSave={handleSave}
           onBack={() => setStep("2")}
+          onCancel={handleCancel}
         />
       )}
     </div>

@@ -1,5 +1,5 @@
 import { createContext, useContext, useState, useCallback, useEffect, type Dispatch, type SetStateAction, type ReactNode } from "react";
-import { createFileRoute, Link, Outlet, useLocation } from "@tanstack/react-router";
+import { createFileRoute, Link, Outlet, useLocation, redirect } from "@tanstack/react-router";
 import { get_purl, request_separation, poll_progress } from "../client/request";
 import {
   LayoutDashboard,
@@ -13,7 +13,13 @@ import {
 import useAuth, { isLoggedIn } from "../hooks/useAuth"
 
 export const Route = createFileRoute("/_layout")({
-  component: Layout
+  component: Layout,
+  beforeLoad: () => {
+    if (isLoggedIn() == false) {
+      console.log("Not logged in")
+      throw redirect({to: "/login"})
+    }
+  }
 });
 
 export type UploadState = "IDLE" | "PENDING" | "COMPUTING" | "UPLOADING" | "READING" | "SUCCESS" | "FAILURE";
@@ -51,6 +57,7 @@ export interface LayoutContextInterface {
   // derived state (Audio should read these, not set them directly)
   showComplete: boolean;
   audioUrl: string | null;
+  taskId: string | null;
 
   // actions
   handleUpload: () => Promise<void>;
@@ -88,6 +95,8 @@ function Layout() {
   const [audioUrl, setAudioUrl] = useState<string | null>(null);
 
   const [audioKey, setAudioKey] = useState<string | null>(null);
+
+  const [taskId, setTaskId] = useState<string | null>(null);
   /****/
 
   useEffect(() => {
@@ -115,7 +124,6 @@ function Layout() {
     setProgress("PENDING");
     try {
       const { signed_url, s3_key } = await get_purl();
-      setAudioKey(s3_key);
 
       if (selectedFile.size > 10485760) {
         throw new Error("File size is too large");
@@ -124,14 +132,18 @@ function Layout() {
       await fetch(signed_url, { method: "PUT", body: selectedFile });
 
       const data = await request_separation({ target, s3_key });
-      const result_url = await poll_progress(data["Task_ID"], (state: UploadState) => setProgress(state));
 
-      const response = await fetch(result_url["result_url"] as string, { method: "GET" });
-      console.log(result_url)
-      console.log("status:", response.status, "content-length header:", response.headers.get("content-length"));
+      setTaskId(data["Task_ID"]);
+
+      const poll_result = await poll_progress(data["Task_ID"], (state: UploadState) => setProgress(state));
+
+      const response = await fetch(poll_result["result_url"] as string, { method: "GET" });
+
       const audio_blob = await response.blob();
-      console.log("Audio Blob Size:", audio_blob.size)
+
       setTrackResult(audio_blob);
+      setAudioKey(poll_result["s3_key"])
+
     } catch (err: unknown) {
       console.error(err);
       setProgress("FAILURE");
@@ -164,6 +176,7 @@ function Layout() {
     audioKey, setAudioKey,
     showComplete,
     audioUrl,
+    taskId,
     handleUpload,
     handleDownload,
   };

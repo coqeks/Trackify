@@ -74,11 +74,18 @@ export const poll_progress = async (task_id: string, setProgress: any) => {
             console.log("Separation task failed.")
             setProgress("FAILURE")
             return 1 
+        } else if (response["Status"] == "CANCELLED") {
+            console.log("Task cancelled successfully.")
+            return
         } else {
             setProgress(response["Status"])
         }
         await new Promise(resolve => setTimeout(resolve, 2000));
     }
+}
+
+export const cancel_progress = async (task_id: string) => {
+    await apiClient.delete("/audio/" + task_id);
 }
 
 export const save_track = async (title: string, cloud_key: string) => {

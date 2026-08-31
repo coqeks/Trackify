@@ -1,12 +1,14 @@
 import { createFileRoute, redirect, Link } from '@tanstack/react-router'
-import useAuth, { isLoggedIn } from '../../hooks/useAuth'
+import useAuth from '../../hooks/useAuth'
 
 export const Route = createFileRoute('/_layout/')({
   component: Index
 })
 
+
+
 function Index() {
-  const { logout, user: currentUser } = useAuth()
+  const { user: currentUser } = useAuth()
   return (
     <div className="flex flex-col gap-5">
       <div className="topbar justify-between">

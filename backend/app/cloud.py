@@ -4,6 +4,7 @@ from botocore.config import Config
 from fastapi import UploadFile, HTTPException
 from dotenv import load_dotenv
 import os
+import time
 
 load_dotenv()
 
@@ -37,8 +38,10 @@ def upload_file(file_path, key):
         error_message = e.response["Error"]["Message"]
         HTTPException(status_code=500, detail=str(error_message))
 
-def remove_object(key: str):
+def remove_object(key: str, delay = None):
     try:
+        if delay != None:
+            time.sleep(delay)
         response = s3_client.delete_object(
             Bucket = BUCKET_NAME,
             Key = key
