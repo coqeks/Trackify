@@ -1,3 +1,8 @@
+"""
+@file:       cloud.py
+@summary:    Wrapper functions for boto3 cloud communication methods
+"""
+
 import boto3
 from botocore.exceptions import ClientError
 from botocore.config import Config

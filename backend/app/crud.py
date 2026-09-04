@@ -1,3 +1,8 @@
+"""
+@file:       crud.py
+@summary:    Create, read, update and delete methods for user and track data.
+"""
+
 from sqlalchemy import update
 from sqlalchemy.orm import Session
 
@@ -48,3 +53,8 @@ def save_track(db: Session, track_in: schemas.TrackCreate, user: models.User):
     db.commit()
     db.refresh(db_track)
     return db_track
+
+def get_tracks(db: Session, user_id: int):
+    tracks = db.query(models.TrackBase).filter(models.TrackBase.creator_id == user_id).all()
+    print(tracks)
+    return tracks

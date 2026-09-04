@@ -1,3 +1,8 @@
+"""
+@file:       utils.py
+@summary:    The main audio separation code, utilized by celery worker.
+"""
+
 import asyncio
 import shutil
 import tempfile
@@ -91,6 +96,22 @@ async def separate_stem(
     target: list,
     task_id: str
 ):
+    """""
+    Creates a temporary directory and a subprocess for demucs separation. 
+    Make sure task isn't cancelled every 2 seconds during subprocess. Aborts if cancelled.
+    Returns the path of resulting track generated.
+
+    Parameters:
+        body (StreamingBody): raw bytes of audio file fetched from cloud storage
+        content_type (Str): indicates file content type of original audio
+        filename (Str): key for audio
+        target (List[Str]): list of audio stems to keep in resulting track
+        task_id (Str): id of task object calling this function, used to track status
+
+    Returns:
+        Path: path of work directory containing separated stems
+        StrPath: path of resulting audio 
+    """""
 
     #Verify content_type is allowed
     if content_type not in ALLOWED_TYPES:

@@ -1,3 +1,8 @@
+"""
+@file:       cancel.py
+@summary:    Sets of functions to edit and check cancellation status. Does so with redis used for worker.
+"""
+
 import redis
 import os
 
