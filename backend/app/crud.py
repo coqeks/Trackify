@@ -55,6 +55,13 @@ def save_track(db: Session, track_in: schemas.TrackCreate, user: models.User):
     return db_track
 
 def get_tracks(db: Session, user_id: int):
-    tracks = db.query(models.TrackBase).filter(models.TrackBase.creator_id == user_id).all()
+    return db.query(models.TrackBase).filter(models.TrackBase.creator_id == user_id).all()
+
+def verify_track(db: Session, user_id: int, target_key: str):
+    tracks = get_tracks(db, user_id)
     print(tracks)
-    return tracks
+    for track in tracks:
+        if target_key in track:
+            return True
+    return False
+    
