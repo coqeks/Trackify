@@ -28,8 +28,6 @@ Trackify lets you upload a song and split it into its individual audio sources (
 - [x] Download the final backing track
 - [ ] Public deployment
 
-*(Update this checklist as you build.)*
-
 ---
 
 ## Project Structure
