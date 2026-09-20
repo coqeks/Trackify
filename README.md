@@ -132,9 +132,8 @@ If the app needs environment variables, create a `.env` file inside the relevant
 
 ## Roadmap
 
-- [ ] Finish core separation workflow
+- [x] Finish core separation workflow
 - [ ] Improve the user interface
-- [ ] Add audio preview and mixing controls
 - [ ] Deploy publicly
 
 ---
