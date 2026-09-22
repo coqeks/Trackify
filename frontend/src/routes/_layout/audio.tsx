@@ -97,7 +97,7 @@ function UploadStep1({
       </div>
       <div className="flex justify-end w-5/6">
           {selectedFile && (
-              <button className="btn-secondary w-1/4" onClick={onProceed}>
+              <button className="btn-secondary w-1/4 hover:bg-gray-400/50" onClick={onProceed}>
                 Proceed
               </button>
           )}
@@ -181,7 +181,7 @@ function UploadStep2({ target, onTargetChange, onBack, onProceed }: UploadStep2P
         
       </div>
       <div className="flex justify-end">
-        <button className="btn-secondary w-1/3 flex justify-center" onClick={onProceed}>
+        <button className="btn-secondary w-1/3 flex justify-center hover:bg-gray-400/50" onClick={onProceed}>
           <h2 className="px-2 translate-y-0.5">Proceed</h2>
           <ArrowRight />
         </button>
@@ -195,7 +195,7 @@ interface UploadStep3Props {
   audioUrl: string | null;
   showComplete: boolean;
   onDownload: () => void;
-  onSave: () => void;
+  onSave: (string) => void;
   onBack: () => void;
   onCancel: () => void;
 }
@@ -205,7 +205,9 @@ function UploadStep3({ upload_progress, audioUrl, showComplete, onDownload, onSa
     && upload_progress != "FAILURE" 
     && upload_progress != "IDLE" 
     && upload_progress != "CANCELLED"
-    
+
+  const inputRef = useRef(null);
+
   return (
     <div className="flex flex-col gap-5">
       <div className="topbar justify-start">
@@ -222,9 +224,9 @@ function UploadStep3({ upload_progress, audioUrl, showComplete, onDownload, onSa
               {upload_progress == "PENDING" && <h5>Starting...</h5>}
               {upload_progress == "READING" && <h5>Reading raw audio...</h5>}
               {upload_progress == "COMPUTING" && <h5>Separating sources... (This can take a few minutes)</h5>}
-              {upload_progress == "UPLOADING" && <h5>Finishing up...</h5>}
+              {upload_progress == "UPLOADING" || upload_progress == "FINISHING" && <h5>Finishing up...</h5>}
               {upload_progress == "CANCELLING" && <h5>Cancelling...</h5>}
-              {(upload_progress != "UPLOADING" && upload_progress != "CANCELLING") &&  <button onClick={onCancel}>Cancel</button>}
+              {(upload_progress != "UPLOADING" && upload_progress != "CANCELLING") &&  <button className="btn-secondary hover:bg-gray-400/50" onClick={onCancel}>Cancel</button>}
             </div>
           }
           {upload_progress == "SUCCESS" && (
@@ -240,7 +242,7 @@ function UploadStep3({ upload_progress, audioUrl, showComplete, onDownload, onSa
                     exit={{ opacity: 0, scale: 0.6 }}
                     transition={{
                       type: "spring",
-                      visualDuration: 0.4,
+                      visualDuration: 0.5,
                       bounce: 0.5,
                     }}
                   >
@@ -257,16 +259,18 @@ function UploadStep3({ upload_progress, audioUrl, showComplete, onDownload, onSa
                  initial={{ opacity: 0, y: 12 }}
                  animate={{ opacity: 1, y: 0 }}
                  transition={{
-                   layout: { type: "spring", visualDuration: 0.4, bounce: 0.3 },
-                   opacity: { duration: 0.4, delay: 0.15 },
-                   y: { duration: 0.4, delay: 0.15 },
+                   layout: { type: "spring", visualDuration: 0.8, bounce: 0.3 },
+                   opacity: { duration: 0.8, delay: 0.3 },
+                   y: { duration: 0.8, delay: 0.3 },
                  }}
                >
                  <audio src={audioUrl} controls className="w-full" />
                  <button className="btn-primary" onClick={onDownload}>
                    Download Track
                  </button>
-                 <button className="btn-primary" onClick={onSave}>
+                 <label htmlFor="trackTitle">Type your track's name</label>
+                 <input type="text" className="border" id="trackTitle" ref={inputRef}></input>
+                 <button className="btn-primary" onClick={() => {onSave(inputRef.current.value)}}>
                    Save Track
                  </button>
                </motion.div>
@@ -306,9 +310,9 @@ function Audio() {
 
   const fileInputRef = useRef<HTMLInputElement>(null);
 
-  const handleSave = useCallback(async () => {
+  const handleSave = useCallback(async (trackTitle: string) => {
     console.log(audioKey)
-    const response = save_track("Saved_Track", audioKey)
+    const response = save_track(trackTitle, audioKey)
     console.log(response)
   }, [audioKey])
 

@@ -22,7 +22,7 @@ export const Route = createFileRoute("/_layout")({
   }
 });
 
-export type UploadState = "IDLE" | "PENDING" | "COMPUTING" | "UPLOADING" | "READING" | "SUCCESS" | "FAILURE" | "CANCELLED" | "CANCELLING";
+export type UploadState = "IDLE" | "PENDING" | "COMPUTING" | "UPLOADING" | "READING" | "FINISHING" | "SUCCESS" | "FAILURE" | "CANCELLED" | "CANCELLING";
 export type AudioType = "guitar" | "piano" | "drums" | "bass" | "vocals" | "other";
 export type Step = "1" | "2" | "3";
 
@@ -106,6 +106,7 @@ function Layout() {
     }
     const url = URL.createObjectURL(trackResult);
     setAudioUrl(url);
+    setProgress("SUCCESS")
     return () => URL.revokeObjectURL(url);
   }, [trackResult]);
 

@@ -61,3 +61,13 @@ class SeparationDetail(BaseModel):
 class TrackCreate(BaseModel):
     title: str
     cloud_key: str
+
+class TrackOut(BaseModel):
+    id: int
+    title: str
+    local_index: int
+    cloud_key: str
+    creator_id: int
+    created_at: datetime
+ 
+    model_config = ConfigDict(from_attributes=True)

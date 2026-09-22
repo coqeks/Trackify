@@ -20,6 +20,15 @@ export interface CloudResponse {
     s3_key: string;
 }
 
+export interface Track {
+    id: number;
+    title: string;
+    local_index: number;
+    cloud_key: string;
+    creator_id: number;
+    created_at: string;
+}
+
 export const read_user = async () => {
     console.log("Reading user")
     const data = await apiClient.get<User>("/auth/me");
@@ -54,6 +63,10 @@ export const get_purl = async () => {
     }
 }
 
+export const get_saved_purl = async (cloud_key: string) => {
+    return await apiClient.get<CloudResponse>(`/dashboard/saved/purl?cloud_key=${encodeURIComponent(cloud_key)}`);
+}
+
 export const request_separation = async (payload: {target: string[], s3_key: string}) => {
     try {
         const response = await apiClient.post("/audio", payload);
@@ -68,7 +81,7 @@ export const poll_progress = async (task_id: string, setProgress: any) => {
         const response = await apiClient.get("/audio/" + task_id);
         if (response["Status"] == "SUCCESS") {
             console.log("Separation task finished.")
-            setProgress("SUCCESS")
+            setProgress("FINISHING")
             return response
         } else if (response["Status"] == "FAILURE") {
             console.log("Separation task failed.")
@@ -92,4 +105,8 @@ export const cancel_progress = async (task_id: string) => {
 export const save_track = async (title: string, cloud_key: string) => {
     const payload = { title, cloud_key }
     return await apiClient.post("/audio/save", payload)
+}
+
+export const get_all_tracks = async () => {
+    return await apiClient.get("/dashboard")
 }

@@ -54,14 +54,15 @@ def save_track(db: Session, track_in: schemas.TrackCreate, user: models.User):
     db.refresh(db_track)
     return db_track
 
-def get_tracks(db: Session, user_id: int):
+def get_tracks(db: Session, user_id: int) -> list[models.TrackBase] | None:
     return db.query(models.TrackBase).filter(models.TrackBase.creator_id == user_id).all()
 
-def verify_track(db: Session, user_id: int, target_key: str):
-    tracks = get_tracks(db, user_id)
-    print(tracks)
-    for track in tracks:
-        if target_key in track:
-            return True
-    return False
-    
+def get_track_by_cloud_key(db: Session, cloud_key: str, user_id: int) -> models.TrackBase | None:
+    return (
+        db.query(models.TrackBase)
+        .filter(
+            models.TrackBase.cloud_key == cloud_key,
+            models.TrackBase.creator_id == user_id,
+        )
+        .first()
+    )
