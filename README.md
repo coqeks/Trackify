@@ -26,6 +26,9 @@ Trackify lets you upload a song and split it into its individual audio sources (
 - [x] Choose which sources to keep or remove
 - [x] Preview the result in the browser
 - [x] Download the final backing track
+- [ ] Allows deletion of tracks
+- [ ] User settings
+- [ ] Automatic cloud cleaning logic
 - [ ] Public deployment
 
 ---
