@@ -20,7 +20,9 @@ Trackify lets you upload a song and split it into its individual audio sources (
 
 ### Demo
 
-Soon!
+
+https://github.com/user-attachments/assets/9cbb8e79-f7aa-48c8-a04a-bb9d246fed7e
+
 
 ---
 
