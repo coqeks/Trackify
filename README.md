@@ -32,7 +32,9 @@ https://github.com/user-attachments/assets/f76144da-3af2-4992-b001-ca7453bb5f78
 - [x] Choose which sources to keep or remove
 - [x] Preview the result in the browser
 - [x] Download the final backing track
-- [ ] Allows deletion of tracks
+- [x] Detect the key and BPM of each song
+- [x] Allows deletion of tracks
+- [x] Refuse processing/saving when remote storage (10 GB cap) is full
 - [ ] User settings
 - [ ] Automatic cloud cleaning logic
 - [ ] Public deployment
@@ -88,6 +90,9 @@ venv\Scripts\activate
 
 # Install dependencies
 pip install -r requirements.txt
+
+# Apply database migrations (needed after pulling schema changes)
+alembic upgrade head
 
 # Run the server
 uvicorn main:app --reload

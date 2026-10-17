@@ -22,11 +22,31 @@ export interface CloudResponse {
 
 export interface Track {
     id: number;
-    title: string;
-    local_index: number;
+    title: string | null;
+    local_index: number | null;
     cloud_key: string;
     creator_id: number;
+    musical_key: string | null;
+    bpm: number | null;
+    size_bytes: number | null;
     created_at: string;
+}
+
+export interface SeparationResult {
+    s3_key: string;
+    result_url: string;
+    musical_key: string | null;
+    bpm: number | null;
+}
+
+export type PollOutcome =
+    | { status: "SUCCESS"; result: SeparationResult }
+    | { status: "FAILURE"; detail: string }
+    | { status: "CANCELLED" };
+
+interface TaskStatusResponse extends Partial<SeparationResult> {
+    Status: string;
+    Detail?: string;
 }
 
 export const read_user = async () => {
@@ -54,13 +74,8 @@ export const signup = async (formData) => {
     }
 }
 
-export const get_purl = async () => {
-    try {
-        const response = await apiClient.get<CloudResponse>("/audio/upload");
-        return response;
-    } catch (error) {
-        throw error;
-    }
+export const get_purl = async (file: { file_type: string; file_size: number; duration_seconds: number | null }) => {
+    return await apiClient.post<CloudResponse>("/audio/upload", file);
 }
 
 export const get_saved_purl = async (cloud_key: string) => {
@@ -69,30 +84,34 @@ export const get_saved_purl = async (cloud_key: string) => {
 
 export const request_separation = async (payload: {target: string[], s3_key: string}) => {
     try {
-        const response = await apiClient.post("/audio", payload);
+        const response = await apiClient.post<{ Task_ID: string }>("/audio", payload);
         return response;
     } catch (error) {
         throw error;
     }
 }
 
-export const poll_progress = async (task_id: string, setProgress: any) => {
+export const poll_progress = async (task_id: string, setProgress: (state: string) => void): Promise<PollOutcome> => {
     while (true) {
-        const response = await apiClient.get("/audio/" + task_id);
-        if (response["Status"] == "SUCCESS") {
-            console.log("Separation task finished.")
+        const response = await apiClient.get<TaskStatusResponse>("/audio/" + task_id);
+        if (response.Status == "SUCCESS") {
             setProgress("FINISHING")
-            return response
-        } else if (response["Status"] == "FAILURE") {
-            console.log("Separation task failed.")
-            setProgress("FAILURE")
-            return 1 
-        } else if (response["Status"] == "CANCELLED") {
-            console.log("Task cancelled successfully.")
+            return {
+                status: "SUCCESS",
+                result: {
+                    s3_key: response.s3_key!,
+                    result_url: response.result_url!,
+                    musical_key: response.musical_key ?? null,
+                    bpm: response.bpm ?? null,
+                },
+            }
+        } else if (response.Status == "FAILURE") {
+            return { status: "FAILURE", detail: response.Detail ?? "Processing failed. Please try again." }
+        } else if (response.Status == "CANCELLED") {
             setProgress("CANCELLED")
-            return "CANCELLED"
+            return { status: "CANCELLED" }
         } else {
-            setProgress(response["Status"])
+            setProgress(response.Status)
         }
         await new Promise(resolve => setTimeout(resolve, 2000));
     }
@@ -104,9 +123,13 @@ export const cancel_progress = async (task_id: string) => {
 
 export const save_track = async (title: string, cloud_key: string) => {
     const payload = { title, cloud_key }
-    return await apiClient.post("/audio/save", payload)
+    return await apiClient.post<{ Response: string; Track: Track }>("/audio/save", payload)
 }
 
 export const get_all_tracks = async () => {
-    return await apiClient.get("/dashboard")
+    return await apiClient.get<{ Tracks: Track[] }>("/dashboard")
+}
+
+export const delete_track = async (track_id: number) => {
+    await apiClient.delete<void>(`/dashboard/tracks/${track_id}`)
 }

@@ -29,7 +29,14 @@ def create_user(db: Session, user_in: schemas.UserCreate) -> models.User:
     db.refresh(db_user)
     return db_user
 
-def save_track(db: Session, track_in: schemas.TrackCreate, user: models.User):
+def save_track(
+    db: Session,
+    track_in: schemas.TrackCreate,
+    user: models.User,
+    musical_key: str | None = None,
+    bpm: float | None = None,
+    size_bytes: int | None = None,
+):
 
     if (db.query(models.TrackBase).filter(models.TrackBase.cloud_key == track_in.cloud_key).first() != None):
         return False
@@ -38,7 +45,10 @@ def save_track(db: Session, track_in: schemas.TrackCreate, user: models.User):
         title=track_in.title,
         local_index = user.tracks_saved,
         cloud_key=track_in.cloud_key,
-        creator_id=user.id
+        creator_id=user.id,
+        musical_key=musical_key,
+        bpm=bpm,
+        size_bytes=size_bytes,
     )
     db.add(db_track)
 
@@ -55,7 +65,26 @@ def save_track(db: Session, track_in: schemas.TrackCreate, user: models.User):
     return db_track
 
 def get_tracks(db: Session, user_id: int) -> list[models.TrackBase] | None:
-    return db.query(models.TrackBase).filter(models.TrackBase.creator_id == user_id).all()
+    return (
+        db.query(models.TrackBase)
+        .filter(models.TrackBase.creator_id == user_id)
+        .order_by(models.TrackBase.created_at.desc())
+        .all()
+    )
+
+def get_track_by_id(db: Session, track_id: int, user_id: int) -> models.TrackBase | None:
+    return (
+        db.query(models.TrackBase)
+        .filter(
+            models.TrackBase.id == track_id,
+            models.TrackBase.creator_id == user_id,
+        )
+        .first()
+    )
+
+def delete_track(db: Session, track: models.TrackBase):
+    db.delete(track)
+    db.commit()
 
 def get_track_by_cloud_key(db: Session, cloud_key: str, user_id: int) -> models.TrackBase | None:
     return (

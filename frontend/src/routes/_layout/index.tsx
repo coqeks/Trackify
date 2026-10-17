@@ -1,10 +1,13 @@
 import { useState, useCallback, useEffect, useRef } from 'react'
 import { createFileRoute, Link } from '@tanstack/react-router'
-import { useQuery } from '@tanstack/react-query'
-import { get_all_tracks, get_saved_purl, type Track } from '../../client/request'
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
+import { AnimatePresence, motion } from 'motion/react'
+import { delete_track, get_all_tracks, get_saved_purl, type Track } from '../../client/request'
 import useAuth from '../../hooks/useAuth'
 import { useToast } from '../../hooks/useToast'
-import { Play, Pause, Download, Loader2, Music, FileAudio } from 'lucide-react'
+import AudioPlayer from '../../components/AudioPlayer'
+import TrackStats from '../../components/TrackStats'
+import { Play, Download, Loader2, Music, FileAudio, Plus, Trash2, X, AudioWaveform } from 'lucide-react'
 
 export const Route = createFileRoute('/_layout/')({
   component: Index,
@@ -16,63 +19,142 @@ function formatDate(value: string) {
   return date.toLocaleDateString(undefined, { year: 'numeric', month: 'short', day: 'numeric' })
 }
 
-type PlaybackState = 'idle' | 'loading' | 'playing' | 'paused'
+const iconBtn =
+  'flex h-9 w-9 items-center justify-center rounded-full text-gray-500 transition-colors hover:bg-gray-100 hover:text-gray-900 disabled:opacity-50'
 
 interface TrackRowProps {
   track: Track
-  playbackState: PlaybackState
+  isActive: boolean
+  isLoading: boolean
+  playerSrc: string | null
   isDownloading: boolean
-  onPlayToggle: (track: Track) => void
+  isDeleting: boolean
+  onPlay: (track: Track) => void
+  onClose: () => void
   onDownload: (track: Track) => void
+  onDelete: (track: Track) => void
 }
 
-function TrackRow({ track, playbackState, isDownloading, onPlayToggle, onDownload }: TrackRowProps) {
-  const isPlaying = playbackState === 'playing'
-  const isLoading = playbackState === 'loading'
+function TrackRow({
+  track,
+  isActive,
+  isLoading,
+  playerSrc,
+  isDownloading,
+  isDeleting,
+  onPlay,
+  onClose,
+  onDownload,
+  onDelete,
+}: TrackRowProps) {
+  const [confirmingDelete, setConfirmingDelete] = useState(false)
+  const title = track.title || 'Untitled track'
 
   return (
-    <div className="flex items-center justify-between gap-4 rounded-2xl border border-gray-200 bg-white p-4 transition-colors hover:border-gray-300">
-      <div className="flex min-w-0 items-center gap-3">
-        <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-gray-100 text-gray-500">
-          <Music size={18} />
-        </div>
-        <div className="min-w-0">
-          <h3 className="truncate font-medium text-gray-900">{track.title}</h3>
-          <p className="text-sm text-gray-500">Saved {formatDate(track.created_at)}</p>
-        </div>
-      </div>
-
-      <div className="flex shrink-0 items-center gap-2">
+    <motion.li
+      layout
+      initial={{ opacity: 0, y: 8 }}
+      animate={{ opacity: 1, y: 0 }}
+      exit={{ opacity: 0, height: 0, marginBottom: 0 }}
+      transition={{ duration: 0.2 }}
+      className={`overflow-hidden rounded-2xl border bg-white transition-colors ${
+        isActive ? 'border-gray-900 shadow-sm' : 'border-gray-200 hover:border-gray-300'
+      }`}
+    >
+      <div className="flex items-center gap-3 p-3 sm:gap-4 sm:p-4">
         <button
-          onClick={() => onPlayToggle(track)}
+          onClick={() => (isActive ? onClose() : onPlay(track))}
           disabled={isLoading}
-          aria-label={isPlaying ? 'Pause' : 'Play'}
-          className="flex h-10 w-10 items-center justify-center rounded-full border border-gray-200 text-gray-700 transition-colors hover:bg-gray-100 disabled:opacity-60"
+          aria-label={isActive ? `Close player for ${title}` : `Play ${title}`}
+          className={`group flex h-11 w-11 shrink-0 items-center justify-center rounded-xl transition-colors ${
+            isActive ? 'bg-gray-900 text-white' : 'bg-gray-100 text-gray-500 hover:bg-gray-900 hover:text-white'
+          }`}
         >
           {isLoading ? (
             <Loader2 size={18} className="animate-spin" />
-          ) : isPlaying ? (
-            <Pause size={18} />
+          ) : isActive ? (
+            <AudioWaveform size={18} />
           ) : (
-            <Play size={18} />
+            <>
+              <Music size={18} className="group-hover:hidden" />
+              <Play size={18} fill="currentColor" className="hidden group-hover:block" />
+            </>
           )}
         </button>
-        <button
-          onClick={() => onDownload(track)}
-          disabled={isDownloading}
-          aria-label="Download"
-          className="flex h-10 w-10 items-center justify-center rounded-full border border-gray-200 text-gray-700 transition-colors hover:bg-gray-100 disabled:opacity-60"
-        >
-          {isDownloading ? <Loader2 size={18} className="animate-spin" /> : <Download size={18} />}
-        </button>
+
+        <div className="min-w-0 flex-1">
+          <h3 className="truncate font-medium text-gray-900">{title}</h3>
+          <div className="mt-1 flex flex-wrap items-center gap-x-3 gap-y-1.5">
+            <span className="text-xs text-gray-500">Saved {formatDate(track.created_at)}</span>
+            <TrackStats musicalKey={track.musical_key} bpm={track.bpm} />
+          </div>
+        </div>
+
+        <div className="flex shrink-0 items-center gap-1">
+          {confirmingDelete ? (
+            <div className="flex items-center gap-1 rounded-full bg-red-50 py-1 pl-3 pr-1">
+              <span className="hidden text-xs font-medium text-red-700 sm:inline">Delete track?</span>
+              <button
+                onClick={() => onDelete(track)}
+                disabled={isDeleting}
+                className="flex items-center gap-1 rounded-full bg-red-600 px-3 py-1 text-xs font-semibold text-white transition-colors hover:bg-red-700 disabled:opacity-60"
+              >
+                {isDeleting ? <Loader2 size={12} className="animate-spin" /> : <Trash2 size={12} />}
+                Delete
+              </button>
+              <button
+                onClick={() => setConfirmingDelete(false)}
+                disabled={isDeleting}
+                aria-label="Cancel delete"
+                className="flex h-7 w-7 items-center justify-center rounded-full text-red-700 hover:bg-red-100"
+              >
+                <X size={14} />
+              </button>
+            </div>
+          ) : (
+            <>
+              <button
+                onClick={() => onDownload(track)}
+                disabled={isDownloading}
+                aria-label={`Download ${title}`}
+                className={iconBtn}
+              >
+                {isDownloading ? <Loader2 size={17} className="animate-spin" /> : <Download size={17} />}
+              </button>
+              <button
+                onClick={() => setConfirmingDelete(true)}
+                aria-label={`Delete ${title}`}
+                className={`${iconBtn} hover:bg-red-50 hover:text-red-600`}
+              >
+                <Trash2 size={17} />
+              </button>
+            </>
+          )}
+        </div>
       </div>
-    </div>
+
+      <AnimatePresence initial={false}>
+        {isActive && playerSrc && (
+          <motion.div
+            initial={{ height: 0, opacity: 0 }}
+            animate={{ height: 'auto', opacity: 1 }}
+            exit={{ height: 0, opacity: 0 }}
+            transition={{ duration: 0.25 }}
+          >
+            <div className="border-t border-gray-100 bg-gray-50/60 p-3 sm:p-4">
+              <AudioPlayer src={playerSrc} autoPlay />
+            </div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+    </motion.li>
   )
 }
 
 function Index() {
   const { user: currentUser } = useAuth()
-  const { showError } = useToast()
+  const { showError, showSuccess } = useToast()
+  const queryClient = useQueryClient()
 
   const { data, isLoading, isError } = useQuery({
     queryKey: ['tracks'],
@@ -81,12 +163,11 @@ function Index() {
 
   const tracks = data?.Tracks ?? []
 
-  const audioRef = useRef<HTMLAudioElement | null>(null)
-
   const objectUrlCache = useRef<Map<string, string>>(new Map())
 
   const [activeTrackId, setActiveTrackId] = useState<number | null>(null)
-  const [playbackState, setPlaybackState] = useState<PlaybackState>('idle')
+  const [loadingTrackId, setLoadingTrackId] = useState<number | null>(null)
+  const [playerSrc, setPlayerSrc] = useState<string | null>(null)
   const [downloadingId, setDownloadingId] = useState<number | null>(null)
 
   useEffect(() => {
@@ -112,37 +193,26 @@ function Index() {
     return objectUrl
   }, [])
 
-  const handlePlayToggle = useCallback(
+  const closePlayer = useCallback(() => {
+    setActiveTrackId(null)
+    setPlayerSrc(null)
+  }, [])
+
+  const handlePlay = useCallback(
     async (track: Track) => {
-      const audio = audioRef.current
-      if (!audio) return
-
-      if (activeTrackId === track.id && playbackState === 'playing') {
-        audio.pause()
-        setPlaybackState('paused')
-        return
-      }
-      if (activeTrackId === track.id && playbackState === 'paused') {
-        await audio.play()
-        setPlaybackState('playing')
-        return
-      }
-
-      setActiveTrackId(track.id)
-      setPlaybackState('loading')
+      setLoadingTrackId(track.id)
       try {
         const objectUrl = await resolveObjectUrl(track)
-        audio.src = objectUrl
-        await audio.play()
-        setPlaybackState('playing')
+        setPlayerSrc(objectUrl)
+        setActiveTrackId(track.id)
       } catch (err) {
         console.error(err)
         showError('Could not play this track. Please try again.')
-        setPlaybackState('idle')
-        setActiveTrackId(null)
+      } finally {
+        setLoadingTrackId(null)
       }
     },
-    [activeTrackId, playbackState, resolveObjectUrl, showError]
+    [resolveObjectUrl, showError]
   )
 
   const handleDownload = useCallback(
@@ -152,7 +222,7 @@ function Index() {
         const objectUrl = await resolveObjectUrl(track)
         const link = document.createElement('a')
         link.href = objectUrl
-        link.download = `${track.title || 'track'}.mp3`
+        link.download = `${track.title || 'track'}.wav`
         document.body.appendChild(link)
         link.click()
         link.remove()
@@ -166,19 +236,41 @@ function Index() {
     [resolveObjectUrl, showError]
   )
 
+  const deleteMutation = useMutation({
+    mutationFn: (track: Track) => delete_track(track.id),
+    onSuccess: (_, track) => {
+      if (activeTrackId === track.id) closePlayer()
+      const cached = objectUrlCache.current.get(track.cloud_key)
+      if (cached) {
+        URL.revokeObjectURL(cached)
+        objectUrlCache.current.delete(track.cloud_key)
+      }
+      queryClient.setQueryData<{ Tracks: Track[] }>(['tracks'], (old) =>
+        old ? { Tracks: old.Tracks.filter((t) => t.id !== track.id) } : old
+      )
+      showSuccess(`"${track.title || 'Untitled track'}" was deleted.`)
+    },
+    onError: (err) => {
+      showError(err instanceof Error ? err.message : 'Could not delete this track.')
+    },
+  })
+
+  const firstName = currentUser?.full_name?.split(' ')[0]
+
   return (
-    <div className="flex flex-col gap-5">
-      <div className="topbar justify-between">
-        <div className="brand">Your Tracks</div>
-        <Link to="/audio" className="btn-secondary">
-          Start uploading
+    <div className="mx-auto flex w-full max-w-4xl flex-col gap-6 pb-10">
+      <div className="flex flex-wrap items-end justify-between gap-4">
+        <div>
+          <p className="text-sm text-gray-500">Welcome back{firstName ? `, ${firstName}` : ''}</p>
+          <h2 className="mt-1 text-2xl font-semibold text-gray-900">Your tracks</h2>
+        </div>
+        <Link
+          to="/audio"
+          className="inline-flex items-center gap-2 rounded-full bg-gray-900 px-4 py-2 text-sm font-semibold text-white transition-colors hover:bg-gray-800"
+        >
+          <Plus size={16} /> New backing track
         </Link>
       </div>
-
-      <h3 className="text-gray-600">Welcome back, {currentUser?.full_name}</h3>
-
-      {/* Hidden shared player - controlled entirely via the row buttons above */}
-      <audio ref={audioRef} onEnded={() => setPlaybackState('idle')} className="hidden" />
 
       {isLoading && (
         <div className="flex flex-col items-center gap-3 py-16 text-gray-400">
@@ -194,28 +286,46 @@ function Index() {
       )}
 
       {!isLoading && !isError && tracks.length === 0 && (
-        <div className="flex flex-col items-center gap-3 rounded-2xl border border-dashed border-gray-300 py-16 text-gray-500">
-          <FileAudio size={48} className="text-gray-300" />
-          <p>You haven&apos;t saved any tracks yet.</p>
-          <Link to="/audio" className="btn-primary px-6 w-auto max-w-1/2">
+        <div className="flex flex-col items-center gap-3 rounded-3xl border border-dashed border-gray-300 bg-white py-16 text-center text-gray-500">
+          <span className="flex h-14 w-14 items-center justify-center rounded-2xl bg-gray-100 text-gray-400">
+            <FileAudio size={26} />
+          </span>
+          <p className="font-medium text-gray-900">No saved tracks yet</p>
+          <p className="max-w-xs text-sm">Upload a song, remove the parts you play, and save it here to practice later.</p>
+          <Link
+            to="/audio"
+            className="mt-2 inline-flex items-center gap-2 rounded-full bg-gray-900 px-5 py-2.5 text-sm font-semibold text-white hover:bg-gray-800"
+          >
             Create your first backing track
           </Link>
         </div>
       )}
 
       {!isLoading && !isError && tracks.length > 0 && (
-        <div className="flex flex-col gap-3">
-          {tracks.map((track) => (
-            <TrackRow
-              key={track.id}
-              track={track}
-              playbackState={activeTrackId === track.id ? playbackState : 'idle'}
-              isDownloading={downloadingId === track.id}
-              onPlayToggle={handlePlayToggle}
-              onDownload={handleDownload}
-            />
-          ))}
-        </div>
+        <>
+          <p className="-mb-3 text-xs font-medium uppercase tracking-wide text-gray-400">
+            {tracks.length} {tracks.length === 1 ? 'track' : 'tracks'}
+          </p>
+          <ul className="flex flex-col gap-3">
+            <AnimatePresence initial={false}>
+              {tracks.map((track) => (
+                <TrackRow
+                  key={track.id}
+                  track={track}
+                  isActive={activeTrackId === track.id}
+                  isLoading={loadingTrackId === track.id}
+                  playerSrc={activeTrackId === track.id ? playerSrc : null}
+                  isDownloading={downloadingId === track.id}
+                  isDeleting={deleteMutation.isPending && deleteMutation.variables?.id === track.id}
+                  onPlay={handlePlay}
+                  onClose={closePlayer}
+                  onDownload={handleDownload}
+                  onDelete={(t) => deleteMutation.mutate(t)}
+                />
+              ))}
+            </AnimatePresence>
+          </ul>
+        </>
       )}
     </div>
   )

@@ -50,9 +50,27 @@ class Token(BaseModel):
 class TokenPayload(BaseModel):
     sub: str | None = None
 
+MAX_UPLOAD_BYTES = 10 * 1024 * 1024
+ALLOWED_UPLOAD_TYPES = {"audio/mpeg", "audio/wav", "audio/ogg", "audio/mp4", "audio/webm", "audio/flac"}
+
 class TrackIn(BaseModel):
     file_type: str
     file_size: int
+    duration_seconds: float | None = None
+
+    @field_validator("file_type")
+    @classmethod
+    def allowed_type(cls, v: str) -> str:
+        if v not in ALLOWED_UPLOAD_TYPES:
+            raise ValueError(f"Unsupported file type '{v}'")
+        return v
+
+    @field_validator("file_size")
+    @classmethod
+    def size_limit(cls, v: int) -> int:
+        if v <= 0 or v > MAX_UPLOAD_BYTES:
+            raise ValueError("File must be between 1 byte and 10 MB")
+        return v
 
 class SeparationDetail(BaseModel):
     target: list[str]
@@ -64,10 +82,13 @@ class TrackCreate(BaseModel):
 
 class TrackOut(BaseModel):
     id: int
-    title: str
-    local_index: int
+    title: str | None = None
+    local_index: int | None = None
     cloud_key: str
     creator_id: int
+    musical_key: str | None = None
+    bpm: float | None = None
+    size_bytes: int | None = None
     created_at: datetime
  
     model_config = ConfigDict(from_attributes=True)

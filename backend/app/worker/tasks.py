@@ -6,6 +6,7 @@
 from celery import Celery, Task
 from celery.exceptions import Ignore
 from app.utils import separate_stem, _cleanup
+from app.analysis import analyze_stems
 from app import cloud
 from app.worker.cancel import is_cancelled, clear_cancel, CancelException
 
@@ -25,7 +26,7 @@ app = Celery("tasks", broker=broker_url, backend=broker_url)
 def separate(self: Task, s3_key: str, target: list):
     """""
     Reads raw bytes and content type of raw audio from cloud storage, 
-    separates the audio, uploads the result and return its cloud key.
+    separates the audio, detects its key and BPM, uploads the result and returns its details.
 
     Parameters:
         self (Task): The current task instance.
@@ -33,7 +34,7 @@ def separate(self: Task, s3_key: str, target: list):
         target (list[str]): Stems to keep in result audio.
 
     Returns:
-        String: Key to the result audio in cloud storage.
+        Dict: s3_key of the result audio in cloud storage, plus detected musical_key and bpm.
     """""
     work_dir = None
 
@@ -72,16 +73,38 @@ def separate(self: Task, s3_key: str, target: list):
         )
 
         self.update_state(
+            state='ANALYZING' if not is_cancelled(id) else 'CANCELLING'
+        )
+
+        # Analysis is a bonus, never fail the whole job because of it
+        try:
+            analysis = analyze_stems(result_path.parent)
+        except Exception as err:
+            print("Key/BPM analysis failed: ", err)
+            analysis = {"musical_key": None, "bpm": None}
+        print("Analysis: ", analysis)
+
+        self.update_state(
             state='UPLOADING' if not is_cancelled(id) else 'CANCELLING'
         )
+
+        # Final, exact capacity check now that the result size is known
+        cloud.ensure_capacity(result_path.stat().st_size)
 
         audio_id = s3_key.split("/")[2]
 
         key = f"uploads/processed/result_{audio_id}"
-        cloud.upload_file(result_path, key)
-        return key
+        # Store analysis alongside the object so saving can read it server-side.
+        # Hyphenated names: metadata travels as x-amz-meta-* headers, where underscores get dropped.
+        metadata = {}
+        if analysis["musical_key"]:
+            metadata["musical-key"] = analysis["musical_key"]
+        if analysis["bpm"]:
+            metadata["bpm"] = str(analysis["bpm"])
+        cloud.upload_file(result_path, key, metadata=metadata, content_type="audio/wav")
+        return {"s3_key": key, **analysis}
     except ClientError as err:
-        return err.response['Error']
+        raise RuntimeError(err.response['Error'].get('Message', 'Cloud storage error'))
     except CancelException:
         print("Cancelled Task")
         self.update_state(

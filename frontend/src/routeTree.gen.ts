@@ -12,6 +12,7 @@ import { Route as rootRouteImport } from './routes/__root'
 import { Route as LayoutRouteImport } from './routes/_layout'
 import { Route as LoginRouteImport } from './routes/login'
 import { Route as SignupRouteImport } from './routes/signup'
+import { Route as WelcomeRouteImport } from './routes/welcome'
 import { Route as LayoutIndexRouteImport } from './routes/_layout/index'
 import { Route as LayoutAudioRouteImport } from './routes/_layout/audio'
 
@@ -29,6 +30,11 @@ const SignupRoute = SignupRouteImport.update({
   path: '/signup',
   getParentRoute: () => rootRouteImport,
 } as any)
+const WelcomeRoute = WelcomeRouteImport.update({
+  id: '/welcome',
+  path: '/welcome',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const LayoutIndexRoute = LayoutIndexRouteImport.update({
   id: '/',
   path: '/',
@@ -44,11 +50,13 @@ export interface FileRoutesByFullPath {
   '/': typeof LayoutIndexRoute
   '/login': typeof LoginRoute
   '/signup': typeof SignupRoute
+  '/welcome': typeof WelcomeRoute
   '/audio': typeof LayoutAudioRoute
 }
 export interface FileRoutesByTo {
   '/login': typeof LoginRoute
   '/signup': typeof SignupRoute
+  '/welcome': typeof WelcomeRoute
   '/audio': typeof LayoutAudioRoute
   '/': typeof LayoutIndexRoute
 }
@@ -57,19 +65,21 @@ export interface FileRoutesById {
   '/_layout': typeof LayoutRouteWithChildren
   '/login': typeof LoginRoute
   '/signup': typeof SignupRoute
+  '/welcome': typeof WelcomeRoute
   '/_layout/audio': typeof LayoutAudioRoute
   '/_layout/': typeof LayoutIndexRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
-  fullPaths: '/' | '/login' | '/signup' | '/audio'
+  fullPaths: '/' | '/login' | '/signup' | '/welcome' | '/audio'
   fileRoutesByTo: FileRoutesByTo
-  to: '/login' | '/signup' | '/audio' | '/'
+  to: '/login' | '/signup' | '/welcome' | '/audio' | '/'
   id:
     | '__root__'
     | '/_layout'
     | '/login'
     | '/signup'
+    | '/welcome'
     | '/_layout/audio'
     | '/_layout/'
   fileRoutesById: FileRoutesById
@@ -78,6 +88,7 @@ export interface RootRouteChildren {
   LayoutRoute: typeof LayoutRouteWithChildren
   LoginRoute: typeof LoginRoute
   SignupRoute: typeof SignupRoute
+  WelcomeRoute: typeof WelcomeRoute
 }
 
 declare module '@tanstack/react-router' {
@@ -101,6 +112,13 @@ declare module '@tanstack/react-router' {
       path: '/signup'
       fullPath: '/signup'
       preLoaderRoute: typeof SignupRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/welcome': {
+      id: '/welcome'
+      path: '/welcome'
+      fullPath: '/welcome'
+      preLoaderRoute: typeof WelcomeRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/_layout/': {
@@ -137,6 +155,7 @@ const rootRouteChildren: RootRouteChildren = {
   LayoutRoute: LayoutRouteWithChildren,
   LoginRoute: LoginRoute,
   SignupRoute: SignupRoute,
+  WelcomeRoute: WelcomeRoute,
 }
 export const routeTree = rootRouteImport
   ._addFileChildren(rootRouteChildren)

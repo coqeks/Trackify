@@ -4,7 +4,7 @@
 """
 
 from datetime import datetime, timezone
-from sqlalchemy import Column, Integer, String, DateTime, Boolean
+from sqlalchemy import Column, Integer, BigInteger, Float, String, DateTime, Boolean
 from app.database import Base
 
 
@@ -27,5 +27,8 @@ class TrackBase(Base):
     local_index = Column(Integer)
     cloud_key = Column(String)
     creator_id = Column(Integer, nullable=False)
+    musical_key = Column(String, nullable=True)
+    bpm = Column(Float, nullable=True)
+    size_bytes = Column(BigInteger, nullable=True)
     created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc))
     

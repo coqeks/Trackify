@@ -1,6 +1,7 @@
 import { createContext, useContext, useState, useCallback, useEffect, type Dispatch, type SetStateAction, type ReactNode } from "react";
 import { createFileRoute, Link, Outlet, useLocation, redirect } from "@tanstack/react-router";
 import { get_purl, request_separation, poll_progress } from "../client/request";
+import { ApiError } from "../client/apiClient";
 import {
   LayoutDashboard,
   FileAudio,
@@ -16,15 +17,38 @@ export const Route = createFileRoute("/_layout")({
   component: Layout,
   beforeLoad: () => {
     if (isLoggedIn() == false) {
-      console.log("Not logged in")
-      throw redirect({to: "/login"})
+      throw redirect({to: "/welcome"})
     }
   }
 });
 
-export type UploadState = "IDLE" | "PENDING" | "COMPUTING" | "UPLOADING" | "READING" | "FINISHING" | "SUCCESS" | "FAILURE" | "CANCELLED" | "CANCELLING";
+export type UploadState = "IDLE" | "PENDING" | "READING" | "COMPUTING" | "ANALYZING" | "UPLOADING" | "FINISHING" | "SUCCESS" | "FAILURE" | "CANCELLED" | "CANCELLING";
 export type AudioType = "guitar" | "piano" | "drums" | "bass" | "vocals" | "other";
 export type Step = "1" | "2" | "3";
+
+export const ALL_STEMS: AudioType[] = ["vocals", "drums", "bass", "guitar", "piano", "other"];
+export const MAX_FILE_BYTES = 10 * 1024 * 1024;
+
+export interface TrackAnalysis {
+  musicalKey: string | null;
+  bpm: number | null;
+}
+
+/** Read duration from the browser's decoder so the server can estimate the processed size. */
+function getAudioDuration(file: File): Promise<number | null> {
+  return new Promise((resolve) => {
+    const url = URL.createObjectURL(file);
+    const audio = new Audio();
+    const done = (value: number | null) => {
+      URL.revokeObjectURL(url);
+      resolve(value);
+    };
+    audio.preload = "metadata";
+    audio.onloadedmetadata = () => done(Number.isFinite(audio.duration) ? audio.duration : null);
+    audio.onerror = () => done(null);
+    audio.src = url;
+  });
+}
 
 type NavItem = {
   label: string;
@@ -58,10 +82,13 @@ export interface LayoutContextInterface {
   showComplete: boolean;
   audioUrl: string | null;
   taskId: string | null;
+  analysis: TrackAnalysis;
+  errorDetail: string | null;
 
   // actions
   handleUpload: () => Promise<void>;
   handleDownload: () => Promise<void>;
+  resetFlow: () => void;
 }
 
 export const LayoutContext = createContext<LayoutContextInterface | null>(null)
@@ -86,7 +113,7 @@ function Layout() {
 
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
 
-  const [target, setTarget] = useState<AudioType[]>(["guitar", "piano", "vocals", "drums", "bass", "other"]);
+  const [target, setTarget] = useState<AudioType[]>(ALL_STEMS);
 
   const [step, setStep] = useState<Step>("1");
 
@@ -97,6 +124,10 @@ function Layout() {
   const [audioKey, setAudioKey] = useState<string | null>(null);
 
   const [taskId, setTaskId] = useState<string | null>(null);
+
+  const [analysis, setAnalysis] = useState<TrackAnalysis>({ musicalKey: null, bpm: null });
+
+  const [errorDetail, setErrorDetail] = useState<string | null>(null);
   /****/
 
   useEffect(() => {
@@ -123,52 +154,87 @@ function Layout() {
   const handleUpload = useCallback(async () => {
     if (!selectedFile) return;
     setProgress("PENDING");
+    setErrorDetail(null);
+    setTrackResult(null);
+    setAudioKey(null);
+    setAnalysis({ musicalKey: null, bpm: null });
     try {
-      const { signed_url, s3_key } = await get_purl();
-
-      if (selectedFile.size > 10485760) {
-        throw new Error("File size is too large");
+      if (selectedFile.size > MAX_FILE_BYTES) {
+        throw new Error("File is too large. The limit is 10 MB.");
       }
 
-      await fetch(signed_url, { method: "PUT", body: selectedFile });
+      // The server refuses here (507) if there isn't enough remote storage for the job
+      const duration = await getAudioDuration(selectedFile);
+      const { signed_url, s3_key } = await get_purl({
+        file_type: selectedFile.type,
+        file_size: selectedFile.size,
+        duration_seconds: duration,
+      });
+
+      const put = await fetch(signed_url, { method: "PUT", body: selectedFile });
+      if (!put.ok) {
+        throw new Error("Upload failed. Please try again.");
+      }
 
       const data = await request_separation({ target, s3_key });
+      setTaskId(data.Task_ID);
 
-      setTaskId(data["Task_ID"]);
-
-      const poll_result = await poll_progress(data["Task_ID"], (state: UploadState) => setProgress(state));
-      if (poll_result == "CANCELLED") {
-        return
+      const outcome = await poll_progress(data.Task_ID, (state) => setProgress(state as UploadState));
+      if (outcome.status === "CANCELLED") return;
+      if (outcome.status === "FAILURE") {
+        setErrorDetail(outcome.detail);
+        setProgress("FAILURE");
+        return;
       }
-    
-      const response = await fetch(poll_result["result_url"] as string, { method: "GET" });
-      const audio_blob = await response.blob();
-      setTrackResult(audio_blob);
-      setAudioKey(poll_result["s3_key"])
-      
 
+      const response = await fetch(outcome.result.result_url, { method: "GET" });
+      if (!response.ok) {
+        throw new Error("Could not download the processed track.");
+      }
+      setAnalysis({ musicalKey: outcome.result.musical_key, bpm: outcome.result.bpm });
+      setAudioKey(outcome.result.s3_key);
+      setTrackResult(await response.blob());
     } catch (err: unknown) {
       console.error(err);
+      setErrorDetail(err instanceof ApiError || err instanceof Error ? err.message : null);
       setProgress("FAILURE");
     }
-  }, [selectedFile, target, progress]);
+  }, [selectedFile, target]);
 
   const handleDownload = useCallback(async () => {
-    if (!trackResult) return;
+    if (!trackResult || !audioUrl) return;
     const downloadLink = document.createElement("a");
-    downloadLink.href = window.URL.createObjectURL(trackResult);
-    downloadLink.download = "BackingTrack.mp3";
+    downloadLink.href = audioUrl;
+    const baseName = selectedFile?.name.replace(/\.[^.]+$/, "") || "BackingTrack";
+    downloadLink.download = `${baseName} (backing track).wav`;
     document.body.appendChild(downloadLink);
     downloadLink.click();
     downloadLink.remove();
 
-    const rootHandle = await navigator.storage.getDirectory();
-    const directoryHandle = await rootHandle.getDirectoryHandle("tracks", { create: true });
-    const fileHandle = await directoryHandle.getFileHandle("audio", { create: true });
-    const writable = await fileHandle.createWritable();
-    await writable.write(trackResult);
-    await writable.close();
-  }, [trackResult]);
+    // Keep a local copy in the origin-private file system where supported (not Safari)
+    try {
+      const rootHandle = await navigator.storage.getDirectory();
+      const directoryHandle = await rootHandle.getDirectoryHandle("tracks", { create: true });
+      const fileHandle = await directoryHandle.getFileHandle("audio", { create: true });
+      const writable = await fileHandle.createWritable();
+      await writable.write(trackResult);
+      await writable.close();
+    } catch (err) {
+      console.warn("Could not cache track locally", err);
+    }
+  }, [trackResult, audioUrl, selectedFile]);
+
+  const resetFlow = useCallback(() => {
+    setProgress("IDLE");
+    setSelectedFile(null);
+    setTarget(ALL_STEMS);
+    setTrackResult(null);
+    setAudioKey(null);
+    setTaskId(null);
+    setAnalysis({ musicalKey: null, bpm: null });
+    setErrorDetail(null);
+    setStep("1");
+  }, []);
 
   const contextValue: LayoutContextInterface = {
     progress, setProgress,
@@ -180,11 +246,14 @@ function Layout() {
     showComplete,
     audioUrl,
     taskId,
+    analysis,
+    errorDetail,
     handleUpload,
     handleDownload,
+    resetFlow,
   };
 
-  const pageName = navItems.find((item) => item.to === location.pathname ).label
+  const pageName = navItems.find((item) => item.to === location.pathname)?.label ?? "Trackify"
 
   return (
     <div className="flex h-screen bg-gray-50">
