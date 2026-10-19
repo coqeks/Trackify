@@ -5,6 +5,7 @@
 
 import asyncio
 import shutil
+import sys
 import tempfile
 import time
 import uuid
@@ -139,7 +140,7 @@ async def separate_stem(
         async with job_semaphore:
             print("Demucs initiating, target: ", target)
             cmd = [
-                "python", "-m", "demucs",
+                sys.executable, "-m", "demucs",
                 "-n", DEMUCS_MODEL,
                 "-o", str(output_dir),
                 str(input_path),

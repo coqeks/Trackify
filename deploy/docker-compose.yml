@@ -1,0 +1,68 @@
+# Production stack for a single server (Oracle Cloud Always Free ARM VM).
+# Run from this directory:  docker compose up -d --build
+
+x-backend: &backend
+  build: ../backend
+  restart: unless-stopped
+  env_file: .env
+  environment:
+    DATABASE_URL: postgresql://trackify:${POSTGRES_PASSWORD}@postgres:5432/trackify
+    BROKER_URL: redis://redis:6379/0
+    REDIS_URL: redis://redis:6379/0
+  depends_on:
+    postgres:
+      condition: service_healthy
+    redis:
+      condition: service_started
+
+services:
+  api:
+    <<: *backend
+    command: uvicorn app.main:app --host 0.0.0.0 --port 8000 --workers 2
+
+  worker:
+    <<: *backend
+    # Each Demucs job uses ~3-4 GB of RAM; 2 at a time fits comfortably in 24 GB
+    command: celery -A app.worker.tasks worker --loglevel=info --concurrency=2
+    volumes:
+      - model_cache:/root/.cache  # keeps downloaded Demucs weights across restarts
+
+  postgres:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: trackify
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      POSTGRES_DB: trackify
+    volumes:
+      - pg_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U trackify"]
+      interval: 5s
+      retries: 10
+
+  redis:
+    image: redis:7-alpine
+    restart: unless-stopped
+    volumes:
+      - redis_data:/data
+
+  caddy:
+    image: caddy:2-alpine
+    restart: unless-stopped
+    ports:
+      - "80:80"
+      - "443:443"
+    environment:
+      API_DOMAIN: ${API_DOMAIN}
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy_data:/data
+    depends_on:
+      - api
+
+volumes:
+  pg_data:
+  redis_data:
+  model_cache:
+  caddy_data:

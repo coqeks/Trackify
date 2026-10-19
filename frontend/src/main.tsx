@@ -21,7 +21,7 @@ declare module '@tanstack/react-router' {
 
 // Grab token asynchronously and store it on API_CONFIG
 API.TOKEN = localStorage.getItem("access_token") || ""
-API.BASE = "http://localhost:8000"
+API.BASE = import.meta.env.VITE_API_BASE ?? "http://localhost:8000"
 
 const queryClient = new QueryClient()
 
